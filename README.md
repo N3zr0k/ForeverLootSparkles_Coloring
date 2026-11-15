@@ -49,8 +49,7 @@ Der Ordnername bleibt `ForeverLootSparkles_Coloring`, damit die Einstellungen (`
 | `ForeverLootSparkles_Coloring/` | Der Spielordner, genau so wie er nach `Interface\AddOns` kommt |
 | `.github/workflows/release.yml` | CI: Lint, ZIP-Build, Release und CurseForge-Upload |
 | `.pkgmeta` / `.luacheckrc` | Packager- und Lint-Konfiguration |
-| `CHANGELOG.md` / `BUGFIX.md` | Änderungen (englisch) / Fehlerbehebungen im Detail |
-| `documentation/` | Entwickler- und API-Doku, CurseForge-Beschreibung, Assets |
+| `CHANGELOG.md` / `BUGFIX.md` | Spielrelevante Änderungen und Bugfixes (englisch) / Fehlerbehebungen im Detail |
 
 ## Release-Ablauf
 
