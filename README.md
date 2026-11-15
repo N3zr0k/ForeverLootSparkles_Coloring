@@ -1,3 +1,11 @@
+[![Version](https://img.shields.io/github/v/release/N3zr0k/ForeverLootSparkles_Coloring?include_prereleases&label=Version&color=CBB9A5&labelColor=72645C&style=flat-square)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/releases)
+[![Letztes Update](https://img.shields.io/github/release-date-pre/N3zr0k/ForeverLootSparkles_Coloring?label=Letztes%20Update&color=CBB9A5&labelColor=72645C&style=flat-square)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/N3zr0k/ForeverLootSparkles_Coloring/release.yml?branch=main&label=Build&color=CBB9A5&labelColor=72645C&style=flat-square)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/actions/workflows/release.yml)
+![WoW Forever](https://img.shields.io/badge/WoW%20Forever-16001-CBB9A5?labelColor=72645C&style=flat-square)
+![Sprachen](https://img.shields.io/badge/Sprachen-11-E6D2B9?labelColor=72645C&style=flat-square)
+![Abhängigkeiten](https://img.shields.io/badge/Abh%C3%A4ngigkeiten-Forever%20Loot%20Sparkles-E6D2B9?labelColor=72645C&style=flat-square)
+[![Lizenz](https://img.shields.io/badge/Lizenz-GPL--3.0--or--later-ADA09A?labelColor=72645C&style=flat-square)](LICENSE)
+
 # Forever Loot Sparkles - Herbs & Ores
 
 Begleit-Addon zu **Forever Loot Sparkles** (WoW Forever). Das Original-Addon wird dabei nicht verändert.
