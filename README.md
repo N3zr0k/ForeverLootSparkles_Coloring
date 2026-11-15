@@ -1,92 +1,92 @@
-[![Version](https://img.shields.io/github/v/release/N3zr0k/ForeverLootSparkles_Coloring?include_prereleases&label=Version&color=CBB9A5&labelColor=72645C&style=flat-square)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/releases)
-[![Letztes Update](https://img.shields.io/github/release-date-pre/N3zr0k/ForeverLootSparkles_Coloring?label=Letztes%20Update&color=CBB9A5&labelColor=72645C&style=flat-square)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/releases)
-[![Build](https://img.shields.io/github/actions/workflow/status/N3zr0k/ForeverLootSparkles_Coloring/release.yml?branch=main&label=Build&color=CBB9A5&labelColor=72645C&style=flat-square)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/actions/workflows/release.yml)
-![WoW Forever](https://img.shields.io/badge/WoW%20Forever-16001-CBB9A5?labelColor=72645C&style=flat-square)
-![Sprachen](https://img.shields.io/badge/Sprachen-11-E6D2B9?labelColor=72645C&style=flat-square)
-![Abhängigkeiten](https://img.shields.io/badge/Abh%C3%A4ngigkeiten-Forever%20Loot%20Sparkles-E6D2B9?labelColor=72645C&style=flat-square)
-[![Lizenz](https://img.shields.io/badge/Lizenz-GPL--3.0--or--later-ADA09A?labelColor=72645C&style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/github/v/release/N3zr0k/ForeverLootSparkles_Coloring?include_prereleases&label=Version)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/releases)
+[![Last update](https://img.shields.io/github/release-date-pre/N3zr0k/ForeverLootSparkles_Coloring?label=Last%20update)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/releases)
+[![Build](https://img.shields.io/github/actions/workflow/status/N3zr0k/ForeverLootSparkles_Coloring/release.yml?branch=main&label=Build)](https://github.com/N3zr0k/ForeverLootSparkles_Coloring/actions/workflows/release.yml)
+![WoW Forever](https://img.shields.io/badge/WoW%20Forever-16001-blue)
+![Languages](https://img.shields.io/badge/Languages-11-blue)
+![Dependencies](https://img.shields.io/badge/Dependencies-Forever%20Loot%20Sparkles-blue)
+[![License](https://img.shields.io/badge/License-GPL--3.0--or--later-blue)](LICENSE)
 
 # Forever Loot Sparkles - Herbs & Ores
 
-Begleit-Addon zu **Forever Loot Sparkles** (WoW Forever). Das Original-Addon wird dabei nicht verändert.
+Companion addon for **Forever Loot Sparkles** (WoW Forever). The original addon is not modified.
 
-## Was das Addon macht
+## What it does
 
-### Funkeln für Kräuter, Erz, Questobjekte, Leichen und Schließkisten
-Forever Loot Sparkles 2.0 hat das Funkeln an Kräutern, Erzvorkommen, Questobjekten und Leichen mit Beute entfernt. Dieses Addon bringt es zurück (übernommen aus Forever Loot Sparkles 1.3.1) und ergänzt Schließkisten, die Schurken knacken können.
+### Sparkles on herbs, ore, quest objects, corpses and footlockers
+Forever Loot Sparkles 2.0 removed the sparkles on herbs, ore veins, quest objects and corpses with loot. This addon brings them back (taken over from Forever Loot Sparkles 1.3.1) and adds footlockers that rogues can pick open.
 
-- **Sicheres Selbstzaubern** (an): Zauber ohne Ziel konnten auf einem Spieler oder NSC landen, den die Soft-Zielerfassung neben dir ausgewählt hatte. Die Soft-Zielerfassung wird deshalb im Kampf und bei lebenden Einheiten pausiert und nach ein paar Metern Bewegung wieder eingeschaltet.
-- **Namensplakette unter dem Funkeln ausblenden** (an): Leichen und Objekte zeigen keine leere Namensplakette oder Lebensleiste mehr, nur das Funkeln.
-- Mit Forever Loot Sparkles 1.x färbt das Addon nur dessen Funkeln ein.
+- **Safe self-cast** (on): spells cast without a target could land on a player or NPC that soft targeting had picked next to you. Soft targeting is therefore paused in combat and on living units, and switched back on once you have moved a few yards.
+- **Hide the nameplate under the sparkle** (on): corpses and objects no longer show an empty nameplate or health bar, only the sparkle.
+- With Forever Loot Sparkles 1.x the addon only colors its sparkles.
 
-### Farben je Kategorie
-Kräuter, Erzvorkommen, Questobjekte, Leichen mit Beute und Schließkisten bekommen jeweils eine eigene Farbe. Die Farbfelder sitzen direkt neben den Checkboxen auf der Optionsseite von Forever Loot Sparkles, darunter ein Schalter zum Ein-/Ausschalten und ein Knopf zum Zurücksetzen. Außer Reichweite wird das Funkeln gedimmt, bei gesperrten Objekten grau.
+### A color per category
+Herbs, ore veins, quest objects, corpses with loot and footlockers each get their own color. The color swatches sit right next to the checkboxes on the Forever Loot Sparkles options page, with an on/off switch and a reset button below them. Out of reach the sparkle dims, on locked objects it turns grey.
 
-### Interaktionssymbole ausblenden
-Optional lässt sich das Interaktionssymbol des Spiels (Zahnrad, Spitzhacke, Blatt, Hand …) über Objekten ausblenden: alle auf einmal oder einzeln für Kräuter, Erz, Questobjekte, Leichen mit Beute, sonstige Objekte und NSCs. Das Funkeln bleibt sichtbar.
+### Hide interaction icons
+Optionally hides the game's interaction icon (gear, pickaxe, leaf, hand ...) over objects: all at once, or separately for herbs, ore, quest objects, corpses with loot, other objects and NPCs. The sparkles stay visible.
 
-### Übersetzung
-Die Optionsseite von Forever Loot Sparkles wird in die Sprache des Clients übersetzt. Unterstützt: Englisch, Deutsch, Französisch, Spanisch (esES, esMX), Portugiesisch (ptBR), Italienisch, Russisch, Koreanisch und Chinesisch (zhCN, zhTW).
+### Translation
+The Forever Loot Sparkles options page is translated into your client language. Supported: English, German, French, Spanish (esES, esMX), Brazilian Portuguese (ptBR), Italian, Russian, Korean and Chinese (zhCN, zhTW).
 
 ## Installation
 
-1. [Forever Loot Sparkles](https://www.curseforge.com/wow/addons/forever-loot-sparkles) installieren (Pflicht-Abhängigkeit).
-2. ZIP aus den [Releases](../../releases) oder von CurseForge herunterladen.
-3. Den Ordner `ForeverLootSparkles_Coloring` nach `World of Warcraft\_retail_\Interface\AddOns` entpacken.
+1. Install [Forever Loot Sparkles](https://www.curseforge.com/wow/addons/forever-loot-sparkles) (required).
+2. Download the ZIP from the [releases](../../releases) or from CurseForge.
+3. Extract the `ForeverLootSparkles_Coloring` folder into `World of Warcraft\_retail_\Interface\AddOns`.
 
-Der Ordnername bleibt `ForeverLootSparkles_Coloring`, damit die Einstellungen (`ForeverLootSparklesColoringDB`, accountweit) erhalten bleiben.
+The folder name stays `ForeverLootSparkles_Coloring` so your settings (`ForeverLootSparklesColoringDB`, account-wide) are kept.
 
-## Befehle
+## Commands
 
-| Befehl | Wirkung |
+| Command | Effect |
 |---|---|
-| `/flscolor` | Öffnet die Optionen auf der Seite von Forever Loot Sparkles |
-| `/flscolor target` | Zeigt im Chat, was das Addon am aktuellen Interaktionsziel erkennt (Name, Objekt-ID, Symbol, Kategorie) – hilfreich für Fehlermeldungen |
-| `/flscolor icons` | Listet, was das Addon auf den Namensplaketten in der Nähe sieht |
+| `/flscolor` | Opens the options on the Forever Loot Sparkles page |
+| `/flscolor target` | Shows in chat what the addon sees on your current interaction target (name, object ID, icon, category), to help with bug reports |
+| `/flscolor icons` | Lists what the addon sees on the nameplates around you |
 
-## Einschränkungen
+## Limitations
 
-- Eingefärbt werden nur die Funken, die Forever Loot Sparkles bzw. dieses Addon selbst zeichnet. Das Beute-Funkeln des Spiels an Questgegenständen zeichnet die Engine.
-- Die Chatzeile „restart the game“ und die Beschreibung von Forever Loot Sparkles in der Addon-Liste bleiben englisch (dafür müssten dessen Dateien geändert werden).
-- Die Übersetzungen passen zu den Texten von Forever Loot Sparkles 1.3.1; umformulierte Texte späterer Versionen bleiben englisch.
+- Only the glints drawn by Forever Loot Sparkles or this addon can be colored. The game's own loot sparkle on quest items is drawn by the engine.
+- The "restart the game" chat line and the addon list description of Forever Loot Sparkles stay English (they would need changes to its files).
+- The translations match the texts of Forever Loot Sparkles 1.3.1; reworded strings in later versions stay English.
 
-## Repository-Aufbau
+## Repository layout
 
-| Pfad | Inhalt |
+| Path | Content |
 |---|---|
-| `ForeverLootSparkles_Coloring/` | Der Spielordner, genau so wie er nach `Interface\AddOns` kommt |
-| `.github/workflows/release.yml` | CI: Lint, ZIP-Build, Release und CurseForge-Upload |
-| `.pkgmeta` / `.luacheckrc` | Packager- und Lint-Konfiguration |
-| `CHANGELOG.md` / `BUGFIX.md` | Spielrelevante Änderungen und Bugfixes (englisch) / Fehlerbehebungen im Detail |
+| `ForeverLootSparkles_Coloring/` | The game folder, exactly as it goes into `Interface\AddOns` |
+| `.github/workflows/release.yml` | CI: lint, ZIP build, release and CurseForge upload |
+| `.pkgmeta` / `.luacheckrc` | Packager and lint configuration |
+| `CHANGELOG.md` / `BUGFIX.md` | Game-relevant changes and bugfixes / bugfixes in detail |
 
-## Release-Ablauf
+## Release process
 
-Die Version steht ausschließlich in der TOC (`## Version:`). Bei einem Push auf `main` gilt:
+The version lives only in the TOC (`## Version:`). On a push to `main`:
 
-1. **Lint** (luacheck) muss grün sein.
-2. Das Addon wird mit dem BigWigs-Packager als `ForeverLootSparkles_HerbsOres-<version>.zip` gebaut und als Artefakt abgelegt (auch bei Pull Requests).
-3. Gibt es zur TOC-Version noch keinen Tag, legt CI Tag und GitHub-Release an:
+1. **Lint** (luacheck) has to pass.
+2. The addon is built with the BigWigs packager as `ForeverLootSparkles_HerbsOres-<version>.zip` and stored as a workflow artifact (pull requests too).
+3. If there is no tag for the TOC version yet, CI creates the tag and a GitHub release:
 
-| TOC-Version | GitHub | CurseForge |
+| TOC version | GitHub | CurseForge |
 |---|---|---|
-| `x.y.z-alpha.N` | Prerelease | kein Upload |
-| `x.y.z-beta.N` | Release, Titel mit „(Beta)“ | Upload als Beta |
-| `x.y.z` | Release | Upload als Release |
+| `x.y.z-alpha.N` | Prerelease | no upload |
+| `x.y.z-beta.N` | Release, title marked "(Beta)" | uploaded as beta |
+| `x.y.z` | Release | uploaded as release |
 
-Die Release-Notes kommen aus dem Abschnitt `## <version>` in `CHANGELOG.md`.
+The release notes come from the `## <version>` section of `CHANGELOG.md`.
 
-### Einmalige Einrichtung
+### One-time setup
 
-Unter *Settings → Secrets and variables → Actions*:
+Under *Settings → Secrets and variables → Actions*:
 
-- **Secret** `CF_API_KEY`: API-Token von https://legacy.curseforge.com/account/api-tokens
-- **Variable** `CURSEFORGE_PROJECT_ID`: numerische Projekt-ID (steht auf der CurseForge-Projektseite unter „About Project“)
-- **Variable** `CF_GAME_VERSION` (optional): nur nötig, falls CurseForge die Interface-Version der TOC nicht zuordnen kann
+- **Secret** `CF_API_KEY`: API token from https://legacy.curseforge.com/account/api-tokens
+- `CURSEFORGE_PROJECT_ID` (variable or secret, optional): CurseForge project ID; the workflow defaults to this project's ID
+- **Variable** `CF_GAME_VERSION` (optional): only needed if CurseForge can't match the TOC's interface version
 
-## Lizenz
+## License
 
-GPL-3.0-or-later, siehe [LICENSE](LICENSE). Der Klassifizierungscode ist aus Forever Loot Sparkles übernommen und angepasst.
+GPL-3.0-or-later, see [LICENSE](LICENSE). The classification code is adapted from Forever Loot Sparkles.
 
-## Danke
+## Thanks
 
-Ein großes Dankeschön an **conoar**, den Autor von Forever Loot Sparkles. Dieses Addon fügt nur etwas Farbe und ein paar Übersetzungen hinzu; die eigentliche Arbeit, Beute, Kräuter und Erz funkeln zu lassen, stammt von conoar.
+A big thank you to **conoar**, the author of Forever Loot Sparkles. This addon only adds a little color and a few translations; all the real work of making loot, herbs and ore sparkle is theirs.
