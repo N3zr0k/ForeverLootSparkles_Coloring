@@ -115,9 +115,16 @@ jobs:
         env:
           CF_API_KEY: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && secrets.CF_API_KEY || '' }}
           CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          NEEDS_CF: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && 'yes' || '' }}
           CF_GAME_VERSION: ${{ vars.CF_GAME_VERSION }}
         run: |
           curl -sSfL -o "$RUNNER_TEMP/release.sh" https://raw.githubusercontent.com/BigWigsMods/packager/v2/release.sh
+          # Ohne Token oder Projekt-ID überspringt der Packager CurseForge
+          # stillschweigend; bei einem neuen Beta/Release soll das auffallen.
+          if [[ -n "$NEEDS_CF" && ( -z "$CF_API_KEY" || -z "$CF_PROJECT_ID" ) ]]; then
+            echo "::error::Für den CurseForge-Upload fehlen das Secret CF_API_KEY oder die Variable CURSEFORGE_PROJECT_ID (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
           args=(-n "${ZIP_NAME}-{project-version}")
           [[ -n "$CF_PROJECT_ID" ]] && args+=(-p "$CF_PROJECT_ID")
           [[ -n "$CF_GAME_VERSION" ]] && args+=(-g "$CF_GAME_VERSION")
@@ -129,6 +136,9 @@ jobs:
           name: ${{ env.ZIP_NAME }}-${{ steps.meta.outputs.version }}
           path: .release/*.zip
           if-no-files-found: error
+          # .release beginnt mit einem Punkt; upload-artifact ignoriert solche
+          # Pfade sonst und findet "keine Dateien".
+          include-hidden-files: true
 
       - name: Tag pushen und GitHub-Release anlegen
         if: steps.meta.outputs.new == 'true'
