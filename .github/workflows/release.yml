@@ -114,7 +114,8 @@ jobs:
         shell: bash
         env:
           CF_API_KEY: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && secrets.CF_API_KEY || '' }}
-          CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID || secrets.CURSEFORGE_PROJECT_ID }}
+          # Die Projekt-ID ist nicht geheim; Variable oder Secret überschreiben sie.
+          CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID || secrets.CURSEFORGE_PROJECT_ID || '1788216' }}
           NEEDS_CF: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && 'yes' || '' }}
           CF_GAME_VERSION: ${{ vars.CF_GAME_VERSION }}
         run: |
