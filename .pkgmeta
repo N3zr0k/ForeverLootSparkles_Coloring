@@ -1,0 +1,13 @@
+# BigWigs packager: the game folder lives in a subfolder of the repo, so it is
+# moved onto the package name. Everything else in the repo root (docs, CI,
+# README) does not end up in the ZIP.
+package-as: ForeverLootSparkles_Coloring
+
+move-folders:
+  ForeverLootSparkles_Coloring/ForeverLootSparkles_Coloring: ForeverLootSparkles_Coloring
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+enable-nolib-creation: no

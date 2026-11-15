@@ -1,0 +1,146 @@
+# Lint, ZIP-Build, Release und CurseForge-Upload.
+#
+# Quelle der Version ist die TOC. Ist sie neu (noch kein Tag) und läuft der
+# Push auf main, legt CI Tag + GitHub-Release an und lädt nach CurseForge hoch.
+#   x.y.z-alpha.N -> GitHub-Prerelease, kein CurseForge
+#   x.y.z-beta.N  -> normales Release, Titel mit "(Beta)", CurseForge als Beta
+#   x.y.z         -> normales Release, CurseForge als Release
+#
+# Benötigt im Repo (Settings > Secrets and variables > Actions):
+#   Secret   CF_API_KEY             CurseForge-API-Token
+#   Variable CURSEFORGE_PROJECT_ID  numerische Projekt-ID
+#   Variable CF_GAME_VERSION        optional, z. B. "1.60.1", falls CurseForge
+#                                   die Interface-Version der TOC nicht kennt
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ADDON: ForeverLootSparkles_Coloring
+  ZIP_NAME: ForeverLootSparkles_HerbsOres
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Luacheck
+        uses: lunarmodules/luacheck@v1
+        with:
+          args: ${{ env.ADDON }}
+
+  package:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version aus der TOC lesen
+        id: meta
+        shell: bash
+        run: |
+          toc="$ADDON/$ADDON.toc"
+          version=$(sed -n 's/^## Version:[[:space:]]*//p' "$toc" | tr -d '\r' | xargs)
+          title=$(sed -n 's/^## Title:[[:space:]]*//p' "$toc" | tr -d '\r' | sed 's/|c[0-9a-fA-F]\{8\}//g; s/|r//g' | xargs)
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta)\.[0-9]+)?$ ]]; then
+            echo "::error file=$toc::Version '$version' passt nicht zum Schema x.y.z[-alpha.N|-beta.N]"
+            exit 1
+          fi
+          case "$version" in
+            *-alpha.*) stage=alpha ;;
+            *-beta.*)  stage=beta ;;
+            *)         stage=release ;;
+          esac
+          new=false
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$version" >/dev/null; then
+              echo "Tag $version existiert bereits, es wird nur gebaut."
+            else
+              new=true
+            fi
+          fi
+          {
+            echo "version=$version"
+            echo "stage=$stage"
+            echo "new=$new"
+            echo "title=$title"
+          } >> "$GITHUB_OUTPUT"
+          echo "Version $version ($stage), neues Release: $new"
+
+      - name: Release-Notes aus CHANGELOG.md
+        if: steps.meta.outputs.new == 'true'
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # Abschnitt "## <version>" bis zur nächsten "## "-Überschrift
+          awk -v v="## $VERSION" '
+            $0 == v { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::warning file=CHANGELOG.md::Kein Abschnitt '## $VERSION' gefunden"
+            echo "Siehe CHANGELOG.md." > release-notes.md
+          fi
+
+      - name: Tag lokal setzen
+        if: steps.meta.outputs.new == 'true'
+        run: git tag "${{ steps.meta.outputs.version }}"
+
+      # Der Packager liest die Version aus dem Tag und den CurseForge-Releasetyp
+      # aus dessen Namen (alpha/beta/release). Den API-Key bekommt er nur für
+      # neue Beta- und Release-Versionen, sonst lädt er nichts hoch.
+      - name: Paketieren (BigWigs packager)
+        uses: BigWigsMods/packager@v2
+        with:
+          args: >-
+            -n "${{ env.ZIP_NAME }}-{project-version}"
+            ${{ vars.CURSEFORGE_PROJECT_ID && format('-p {0}', vars.CURSEFORGE_PROJECT_ID) || '' }}
+            ${{ vars.CF_GAME_VERSION && format('-g {0}', vars.CF_GAME_VERSION) || '' }}
+        env:
+          CF_API_KEY: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && secrets.CF_API_KEY || '' }}
+
+      - name: ZIP als Artefakt ablegen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}-${{ steps.meta.outputs.version }}
+          path: .release/*.zip
+          if-no-files-found: error
+
+      - name: Tag pushen und GitHub-Release anlegen
+        if: steps.meta.outputs.new == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          STAGE: ${{ steps.meta.outputs.stage }}
+          TITLE: ${{ steps.meta.outputs.title }}
+        run: |
+          git push origin "refs/tags/$VERSION"
+          name="$TITLE $VERSION"
+          flags=()
+          case "$STAGE" in
+            alpha) flags+=(--prerelease) ;;
+            beta)  name="$name (Beta)" ;;
+          esac
+          gh release create "$VERSION" .release/*.zip \
+            --title "$name" \
+            --notes-file release-notes.md \
+            --verify-tag \
+            "${flags[@]}"

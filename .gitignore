@@ -1,0 +1,13 @@
+# Lokale Arbeitsanweisungen für Claude Code
+CLAUDE.md
+
+# Build-Ausgabe
+.release/
+*.zip
+
+# Betriebssystem / Editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/
