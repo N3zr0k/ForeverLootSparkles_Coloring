@@ -106,15 +106,22 @@ jobs:
       # Der Packager liest die Version aus dem Tag und den CurseForge-Releasetyp
       # aus dessen Namen (alpha/beta/release). Den API-Key bekommt er nur für
       # neue Beta- und Release-Versionen, sonst lädt er nichts hoch.
+      # Das Script statt der Action, weil der Packager bei einem Branch-Push
+      # abbricht ("Found future tag"), sobald HEAD einen Tag hat. Den Tag setzt
+      # dieser Workflow aber selbst direkt davor; als manueller Lauf gemeldet
+      # baut der Packager trotzdem.
       - name: Paketieren (BigWigs packager)
-        uses: BigWigsMods/packager@v2
-        with:
-          args: >-
-            -n "${{ env.ZIP_NAME }}-{project-version}"
-            ${{ vars.CURSEFORGE_PROJECT_ID && format('-p {0}', vars.CURSEFORGE_PROJECT_ID) || '' }}
-            ${{ vars.CF_GAME_VERSION && format('-g {0}', vars.CF_GAME_VERSION) || '' }}
+        shell: bash
         env:
           CF_API_KEY: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && secrets.CF_API_KEY || '' }}
+          CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          CF_GAME_VERSION: ${{ vars.CF_GAME_VERSION }}
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/release.sh" https://raw.githubusercontent.com/BigWigsMods/packager/v2/release.sh
+          args=(-n "${ZIP_NAME}-{project-version}")
+          [[ -n "$CF_PROJECT_ID" ]] && args+=(-p "$CF_PROJECT_ID")
+          [[ -n "$CF_GAME_VERSION" ]] && args+=(-g "$CF_GAME_VERSION")
+          GITHUB_EVENT_NAME=workflow_dispatch bash "$RUNNER_TEMP/release.sh" "${args[@]}"
 
       - name: ZIP als Artefakt ablegen
         uses: actions/upload-artifact@v4
