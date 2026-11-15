@@ -8,7 +8,7 @@
 #
 # Benötigt im Repo (Settings > Secrets and variables > Actions):
 #   Secret   CF_API_KEY             CurseForge-API-Token
-#   Variable CURSEFORGE_PROJECT_ID  numerische Projekt-ID
+#   Variable CURSEFORGE_PROJECT_ID  numerische Projekt-ID (als Secret geht auch)
 #   Variable CF_GAME_VERSION        optional, z. B. "1.60.1", falls CurseForge
 #                                   die Interface-Version der TOC nicht kennt
 
@@ -114,7 +114,7 @@ jobs:
         shell: bash
         env:
           CF_API_KEY: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && secrets.CF_API_KEY || '' }}
-          CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          CF_PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID || secrets.CURSEFORGE_PROJECT_ID }}
           NEEDS_CF: ${{ steps.meta.outputs.new == 'true' && steps.meta.outputs.stage != 'alpha' && 'yes' || '' }}
           CF_GAME_VERSION: ${{ vars.CF_GAME_VERSION }}
         run: |
