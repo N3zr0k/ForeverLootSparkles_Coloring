@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.2.5
+
+- Fixed: with the interact key on, safe self-cast kept switching the interact key off at the auction house and other NPCs, so the interact icon flickered and addons like Auctionator ran into errors (see BUGFIX.md).
+- Safe self-cast is now a choice of three modes: **Off**, **Only in combat** and **In combat and on units**. If you had switched the interact key on yourself, "Only in combat" is used until you pick a mode.
+- "In combat and on units" leaves NPCs that offer a service alone (vendors, auctioneers, bankers, flight masters, trainers, quest givers), so the interact key keeps working on them.
+- No game settings are changed while an NPC, auction house or mailbox window is open.
+- Hiding interaction icons is more reliable: only the icon itself is hidden, it comes back exactly as the game had it, and the NPC icon setting is left alone if it can't be read.
+
+## 2.2.4
+
+- Less CPU and memory use when hiding interaction icons, especially with "Hide all".
+
 ## 2.2.3
 
 - Less CPU use: whether an object belongs to a quest is now remembered until your quest log changes, instead of being looked up several times a second for every nameplate.

@@ -96,8 +96,9 @@ local function TranslateInitializer(initializer, map)
 end
 
 -- Layer 3: labels of rows as they are drawn
+local LABEL_KEYS = { "Text", "Title", "Label" };
 local function FixRow(frame, map)
-	for _, key in ipairs({ "Text", "Title", "Label" }) do
+	for _, key in ipairs(LABEL_KEYS) do
 		local fontString = frame[key];
 		if type(fontString) == "table" and fontString.GetText then
 			local ok, text = pcall(fontString.GetText, fontString);

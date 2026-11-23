@@ -4,15 +4,20 @@
 -- setting, since without it objects get no nameplate to hang the sparkle on,
 -- so the setting stays on and only the icon is made invisible (alpha 0) on
 -- the nameplates of the chosen kinds. The sparkle itself is not affected.
+-- Only the icon texture is touched where it can be found, the alpha the game
+-- last asked for is kept and put back when the icon is shown again, and the
+-- nameplates are checked when they change (a slow poll only as a fallback).
 
 local _, ns = ...;
 
 ns.ICON_KINDS = { "herb", "ore", "quest", "corpseLoot", "other", "npc" };
 
-local POLL_INTERVAL = 0.2;
+local POLL_INTERVAL = 1;   -- fallback; changes are handled by events
+local RECHECK_DELAY = 0.05; -- the game may set the icon a frame after its event
 
 local plateUnits = {}; -- nameplate frame -> unit token
 local hidden = {};     -- icon frame/texture -> true while we hide it
+local wanted = {};     -- icon -> the alpha the game last asked for while hidden
 
 local function IsIconTexture(texture)
 	local ok, file = pcall(texture.GetTexture, texture);
@@ -45,33 +50,49 @@ local function FindIconInRegions(frame, found)
 	end
 end
 
--- The icon objects on one nameplate. Blizzard's nameplates keep it in a
--- SoftTargetFrame; otherwise the textures showing a cursor icon are used.
-local function FindIcons(plate)
-	local found = {};
-	local unitFrame = plate.UnitFrame;
-	local holder = (unitFrame and unitFrame.SoftTargetFrame) or plate.SoftTargetFrame;
-	if type(holder) == "table" and holder.SetAlpha then
-		found[1] = holder;
-		local icon = holder.Icon or holder.icon;
-		if type(icon) == "table" and icon.SetAlpha then
-			found[2] = icon;
-		end
-		return found;
-	end
-	for _, frame in ipairs({ plate, unitFrame }) do
-		if type(frame) == "table" and frame.GetRegions then
-			FindIconInRegions(frame, found);
-			local ok, children = pcall(function() return { frame:GetChildren() }; end);
-			if ok then
-				for _, child in ipairs(children) do
-					if child ~= unitFrame then
-						FindIconInRegions(child, found);
-					end
+-- One result list per nameplate, refilled on every call: the poller asks
+-- several times a second, and nameplates are pooled, so this stays small.
+local iconLists = {};
+
+local function FindIconInFrame(frame, unitFrame, found)
+	if type(frame) == "table" and frame.GetRegions then
+		FindIconInRegions(frame, found);
+		local ok, children = pcall(function() return { frame:GetChildren() }; end);
+		if ok then
+			for _, child in ipairs(children) do
+				if child ~= unitFrame then
+					FindIconInRegions(child, found);
 				end
 			end
 		end
 	end
+end
+
+-- The icon objects on one nameplate. Blizzard's nameplates keep it in a
+-- SoftTargetFrame: only its icon texture is hidden, the frame itself only
+-- when it has no such texture. Otherwise the textures showing a cursor icon
+-- are used.
+local function FindIcons(plate)
+	local found = iconLists[plate];
+	if found then
+		wipe(found);
+	else
+		found = {};
+		iconLists[plate] = found;
+	end
+	local unitFrame = plate.UnitFrame;
+	local holder = (unitFrame and unitFrame.SoftTargetFrame) or plate.SoftTargetFrame;
+	if type(holder) == "table" and holder.SetAlpha then
+		local icon = holder.Icon or holder.icon;
+		if type(icon) == "table" and icon.SetAlpha then
+			found[1] = icon;
+		else
+			found[1] = holder;
+		end
+		return found;
+	end
+	FindIconInFrame(plate, unitFrame, found);
+	FindIconInFrame(unitFrame, unitFrame, found);
 	return found;
 end
 
@@ -102,30 +123,54 @@ local function AnyHidden()
 	return false;
 end
 
--- Blizzard may set the alpha again (fading, range); put it back to 0 at once
+-- Every alpha this file sets goes through here, so the hook below can tell
+-- it apart from the game's own
+local ownWrite = false;
+local function WriteAlpha(icon, alpha)
+	ownWrite = true;
+	pcall(icon.SetAlpha, icon, alpha);
+	ownWrite = false;
+end
+
+-- Blizzard may set the alpha again (fading, range): remember what it wanted
+-- and put it back to 0 at once
 local hooked = {};
-local reapplying = false;
 local function KeepHidden(icon, alpha)
-	if hidden[icon] and alpha ~= 0 and not reapplying then
-		reapplying = true;
-		pcall(icon.SetAlpha, icon, 0);
-		reapplying = false;
+	if ownWrite or not hidden[icon] then
+		return;
+	end
+	if type(alpha) == "number" and not ns.IsSecret(alpha) then
+		wanted[icon] = alpha;
+	end
+	if alpha ~= 0 then
+		WriteAlpha(icon, 0);
 	end
 end
 
 local function SetIconVisible(icon, visible)
-	if not visible and not hooked[icon] and hooksecurefunc then
-		hooked[icon] = true;
-		pcall(hooksecurefunc, icon, "SetAlpha", KeepHidden);
-	end
 	if visible then
 		if hidden[icon] then
 			hidden[icon] = nil;
-			pcall(icon.SetAlpha, icon, 1);
+			local alpha = wanted[icon];
+			wanted[icon] = nil;
+			WriteAlpha(icon, alpha or 1);
 		end
-	elseif not hidden[icon] or icon:GetAlpha() ~= 0 then
+		return;
+	end
+	if not hooked[icon] and hooksecurefunc then
+		hooked[icon] = true;
+		pcall(hooksecurefunc, icon, "SetAlpha", KeepHidden);
+	end
+	if not hidden[icon] then
+		local ok, alpha = pcall(icon.GetAlpha, icon);
+		wanted[icon] = (ok and type(alpha) == "number" and not ns.IsSecret(alpha)) and alpha or nil;
 		hidden[icon] = true;
-		pcall(icon.SetAlpha, icon, 0);
+		WriteAlpha(icon, 0);
+	else
+		local ok, alpha = pcall(icon.GetAlpha, icon);
+		if not ok or alpha ~= 0 then
+			WriteAlpha(icon, 0);
+		end
 	end
 end
 
@@ -133,15 +178,18 @@ local function UpdatePlate(plate, unit)
 	if plate.IsForbidden and plate:IsForbidden() then
 		return;
 	end
-	local hide = ShouldHide(unit and ns.KindOfUnit(unit));
+	-- "Hide all" doesn't need to know what the unit is
+	local db = ns.db;
+	local hide = (db and db.hideAllIcons) or ShouldHide(unit and ns.KindOfUnit(unit));
 	for _, icon in ipairs(FindIcons(plate)) do
 		SetIconVisible(icon, not hide);
 	end
 end
 
 -- Every visible nameplate, with its unit token where known
+local seen = {}; -- reused, EachPlate never nests
 local function EachPlate(func)
-	local seen = {};
+	wipe(seen);
 	for plate, unit in pairs(plateUnits) do
 		seen[plate] = true;
 		func(plate, unit);
@@ -160,10 +208,27 @@ local function EachPlate(func)
 	end
 end
 
+local function UpdateOne(plate, unit)
+	pcall(UpdatePlate, plate, unit);
+end
+
 local function UpdateAll()
-	EachPlate(function(plate, unit)
-		pcall(UpdatePlate, plate, unit);
-	end);
+	EachPlate(UpdateOne);
+end
+
+-- One more look shortly after an event, for icons the game sets a frame later
+local recheckPending = false;
+local function Recheck()
+	recheckPending = false;
+	if AnyHidden() then
+		UpdateAll();
+	end
+end
+local function ScheduleRecheck()
+	if not recheckPending and C_Timer then
+		recheckPending = true;
+		C_Timer.After(RECHECK_DELAY, Recheck);
+	end
 end
 
 -- /flscolor icons: what the addon sees on each nameplate
@@ -223,12 +288,22 @@ end);
 -- game setting SoftTargetIconInteract, which Forever Loot Sparkles doesn't
 -- need, so for NPCs that setting is switched off and the player's value is
 -- put back once the option is unticked. Not in combat: cvars can't change then.
+-- Not while an NPC window is open either (see Sparkles.lua), and not at all
+-- when the player's value can't be read, since it could never be put back.
 local NPC_ICON_CVAR = "SoftTargetIconInteract";
 local pendingCVar = false;
+local WINDOW_RETRY = 1; -- seconds between checks while an NPC window is open
 
 local GetCVarValue, SetCVarValue = ns.GetCVarValue, ns.SetCVarValue;
 
-local function ApplyNpcCVar()
+local ApplyNpcCVar;
+local function RetryNpcCVar()
+	if pendingCVar and not InCombatLockdown() then
+		ApplyNpcCVar();
+	end
+end
+
+function ApplyNpcCVar()
 	local db = ns.db;
 	if not (db and C_CVar) then
 		return;
@@ -237,10 +312,21 @@ local function ApplyNpcCVar()
 		pendingCVar = true;
 		return;
 	end
+	if ns.InteractionWindowOpen and ns.InteractionWindowOpen() then
+		pendingCVar = true;
+		if C_Timer then
+			C_Timer.After(WINDOW_RETRY, RetryNpcCVar);
+		end
+		return;
+	end
 	pendingCVar = false;
 	if db.hideAllIcons or db.hideIcons.npc then
 		if db.savedNpcIconCVar == nil then
-			db.savedNpcIconCVar = GetCVarValue(NPC_ICON_CVAR) or false;
+			local current = GetCVarValue(NPC_ICON_CVAR);
+			if type(current) ~= "string" then
+				return; -- unreadable: leave the player's setting alone
+			end
+			db.savedNpcIconCVar = current;
 		end
 		SetCVarValue(NPC_ICON_CVAR, 0);
 	elseif db.savedNpcIconCVar ~= nil then
@@ -275,6 +361,7 @@ events:SetScript("OnEvent", function(_, event, unit)
 			plateUnits[plate] = unit;
 			if AnyHidden() then
 				pcall(UpdatePlate, plate, unit);
+				ScheduleRecheck();
 			end
 		end
 	elseif event == "NAME_PLATE_UNIT_REMOVED" then
@@ -294,6 +381,7 @@ events:SetScript("OnEvent", function(_, event, unit)
 		ApplyNpcCVar();
 	elseif AnyHidden() then
 		UpdateAll();
+		ScheduleRecheck();
 	end
 end);
 for _, event in ipairs({ "NAME_PLATE_UNIT_ADDED", "NAME_PLATE_UNIT_REMOVED", "PLAYER_SOFT_INTERACT_CHANGED",

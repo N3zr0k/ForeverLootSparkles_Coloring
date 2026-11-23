@@ -9,9 +9,11 @@
 -- Taken over from Forever Loot Sparkles 1.3.1 (SoftTarget.lua, GPL-3.0-or-later),
 -- which removed this feature in 2.0.0. Changes in this addon:
 --  * glints take the color chosen per category (Coloring options);
---  * soft targeting is paused in combat and while it has picked a living
---    unit, so spells cast without a target don't land on that unit
---    (Forever Loot Sparkles issue #10, option "safeSelfCast");
+--  * soft targeting is paused in combat and, depending on the mode, while it
+--    has picked a player or other living unit, so spells cast without a
+--    target don't land on that unit (Forever Loot Sparkles issue #10, option
+--    "safeSelfCastMode"); NPCs that offer a service are left alone, and no
+--    cvar is written while an NPC or mailbox window is open;
 --  * the nameplate the sparkle hangs on can be made invisible, so corpses
 --    don't show an empty health bar (#12, option "hidePlate");
 --  * cvars are only touched once Forever Loot Sparkles 2.x has finished
@@ -185,14 +187,91 @@ end
 
 -- Spells cast without a target can land on the soft interact target when it
 -- is a living unit (a player or NPC next to you). Only objects and corpses
--- need it for the sparkle, so soft targeting is switched off in combat and as
--- soon as it picks a living unit, and back on once you have moved a few yards
--- (or after a few seconds where the game won't give your position). The value
--- it had is kept in db.pausedInteract, so a logout during a pause can't leave
--- it off.
+-- need it for the sparkle, so soft targeting is switched off in combat and,
+-- in the "units" mode, as soon as it picks a living unit, and back on once you
+-- have moved a few yards (or after a few seconds where the game won't give
+-- your position). The value it had is kept in db.pausedInteract, so a logout
+-- during a pause can't leave it off.
+--
+-- Modes (db.safeSelfCastMode):
+--   "off"    never paused;
+--   "combat" paused in combat only;
+--   "units"  also while it has picked a player or other living unit, except
+--            NPCs that offer a service (vendor, auctioneer, banker ...), so the
+--            interact key keeps working on them.
+-- While db.safeSelfCastAuto is set (the player hasn't picked a mode yet) the
+-- mode follows the player's own interact key setting: "combat" if they had it
+-- switched on before this addon touched it, "units" otherwise.
+local SAFE_CAST_MODES = { off = true, combat = true, units = true };
 local RESUME_DISTANCE = 5; -- yards
 local RESUME_TIME = 3;     -- seconds, without a position
+local BACKOFF_WINDOW = 10; -- seconds: the same unit picked again this soon after a resume ...
+local BACKOFF_MAX = 4;     -- ... doubles the wait, up to 2^4 = 16 times RESUME_TIME
 local pausedAt, pausedY, pausedX;
+local pausedGUID, resumedAt, backoff = nil, nil, 0;
+
+local function SafeCastMode()
+	local mode = db and db.safeSelfCastMode;
+	return SAFE_CAST_MODES[mode] and mode or "units";
+end
+
+-- true: the player had the interact key on before this addon switched it on;
+-- false: it was off; nil: unknown
+local function PlayerUsesInteractKey()
+	local original;
+	if db.savedCVars then
+		original = db.savedCVars.SoftTargetInteract;
+	elseif db.pausedInteract ~= nil then
+		original = db.pausedInteract;
+	else
+		original = GetCVarValue("SoftTargetInteract");
+	end
+	if type(original) ~= "string" then
+		return nil;
+	end
+	return original ~= "0";
+end
+
+-- Picks the mode from the player's interact key while they haven't chosen one
+local function ApplyAutoMode()
+	if not db.safeSelfCastAuto then
+		return;
+	end
+	db.safeSelfCastMode = PlayerUsesInteractKey() and "combat" or "units";
+	db.safeSelfCast = true;
+end
+
+---------------------------------------------------------------------------
+-- NPC windows
+---------------------------------------------------------------------------
+
+-- While a window opened by talking to an NPC or using a mailbox is open, no
+-- cvar is written: every write runs Blizzard's CVAR_UPDATE handlers with this
+-- addon's taint, which addons working in those windows (Auctionator ...) then
+-- trip over. The frames are checked directly, so a missed "closed" event
+-- can't leave the addon frozen.
+local INTERACTION_FRAMES = {
+	"AuctionFrame", "AuctionHouseFrame", "MerchantFrame", "MailFrame", "BankFrame",
+	"GossipFrame", "QuestFrame", "TaxiFrame", "ClassTrainerFrame", "TradeFrame",
+	"GuildRegistrarFrame", "PetStableFrame", "TabardFrame",
+};
+local interactionTypes = {}; -- PLAYER_INTERACTION_MANAGER_FRAME_SHOW type -> true
+
+local function InteractionWindowOpen()
+	if next(interactionTypes) then
+		return true;
+	end
+	for _, name in ipairs(INTERACTION_FRAMES) do
+		local frame = _G[name];
+		if type(frame) == "table" and frame.IsShown then
+			local ok, shown = pcall(frame.IsShown, frame);
+			if ok and shown == true then
+				return true;
+			end
+		end
+	end
+	return false;
+end
 
 local function PlayerPosition()
 	if not UnitPosition then
@@ -204,7 +283,12 @@ local function PlayerPosition()
 	end
 end
 
-local function Pause(reason)
+-- guid: the unit soft targeting had picked ("unit" pauses). The paused soft
+-- targeting can't show when that unit is gone, so the pause ends by moving or
+-- waiting; if the same unit is picked again right after, the wait doubles,
+-- so standing next to it doesn't switch the interact key on and off every
+-- few seconds.
+local function Pause(reason, guid)
 	if paused then
 		if reason == "combat" then
 			paused = "combat";
@@ -218,9 +302,18 @@ local function Pause(reason)
 	if current == nil or current == "0" then
 		return;
 	end
+	local now = GetTime();
+	if reason == "unit" then
+		if guid and guid == pausedGUID and resumedAt and now - resumedAt < BACKOFF_WINDOW then
+			backoff = min(backoff + 1, BACKOFF_MAX);
+		else
+			backoff = 0;
+		end
+		pausedGUID = guid;
+	end
 	db.pausedInteract = current;
 	paused = reason;
-	pausedAt = GetTime();
+	pausedAt = now;
 	pausedY, pausedX = PlayerPosition();
 	SetCVarValue("SoftTargetInteract", 0);
 end
@@ -228,6 +321,9 @@ end
 local function Resume()
 	if InCombatLockdown() then
 		return;
+	end
+	if paused == "unit" then
+		resumedAt = GetTime();
 	end
 	paused = nil;
 	if db.pausedInteract ~= nil then
@@ -240,16 +336,71 @@ local function Resume()
 end
 
 local function ReadyToResume()
+	local waited = GetTime() - pausedAt;
+	if waited < RESUME_TIME * (2 ^ backoff) - RESUME_TIME then
+		return false; -- the same unit came back right after the last resume
+	end
 	local y, x = PlayerPosition();
 	if y and pausedY then
 		local dy, dx = y - pausedY, x - pausedX;
 		return dy * dy + dx * dx >= RESUME_DISTANCE * RESUME_DISTANCE;
 	end
-	return GetTime() - pausedAt >= RESUME_TIME;
+	return waited >= RESUME_TIME * (2 ^ backoff);
 end
 
 local function IsLivingUnit(unit)
 	return SafeCall(UnitIsDead, unit) == false and SafeCall(UnitExists, unit) == true;
+end
+
+-- Cursor icons of NPCs that offer a service. Read as fileIDs where the client
+-- knows the paths, otherwise as keywords in the path or atlas name.
+local SERVICE_CURSORS = {
+	"Speak", "Buy", "Repair", "Taxi", "Trainer", "Innkeeper", "Mail", "Directions",
+	"Quest", "QuestRepeatable", "QuestTurnIn", "Interact", "Transmogrify", "Reforge",
+};
+local SERVICE_KEYWORDS = {
+	"speak", "buy", "repair", "taxi", "trainer", "innkeeper", "mail", "directions",
+	"quest", "interact", "transmog", "reforge", "bank", "auction",
+};
+local serviceCursorIDs = {};
+if GetFileIDFromPath then
+	for _, name in ipairs(SERVICE_CURSORS) do
+		for _, prefix in ipairs({ "", "Unable" }) do
+			local path = "Interface\\Cursor\\" .. prefix .. name;
+			local id = SafeCall(GetFileIDFromPath, path) or SafeCall(GetFileIDFromPath, path .. ".blp");
+			if id then
+				serviceCursorIDs[id] = true;
+			end
+		end
+	end
+end
+
+local function IsServiceCursorName(name)
+	if type(name) ~= "string" then
+		return false;
+	end
+	name = name:lower();
+	for _, keyword in ipairs(SERVICE_KEYWORDS) do
+		if name:find(keyword, 1, true) then
+			return true;
+		end
+	end
+	return false;
+end
+
+-- An NPC you talk to rather than cast on: vendor, auctioneer, banker, flight
+-- master, trainer, innkeeper, quest giver, guard giving directions ... Players,
+-- pets, enemies and NPCs whose cursor can't be read are not.
+local function IsServiceNPC(unit)
+	if SafeCall(UnitIsPlayer, unit) ~= false or SafeCall(UnitPlayerControlled, unit) == true
+		or SafeCall(UnitCanAttack, "player", unit) == true then
+		return false;
+	end
+	local texture, atlas = ns.CursorTexture(unit);
+	if type(texture) == "number" and serviceCursorIDs[texture] then
+		return true;
+	end
+	return IsServiceCursorName(texture) or IsServiceCursorName(atlas);
 end
 
 ---------------------------------------------------------------------------
@@ -532,6 +683,9 @@ function Evaluate()
 	if not ready then
 		return;
 	end
+	if InteractionWindowOpen() then
+		return; -- nothing is written while an NPC window is open; checked again once it closes
+	end
 	if not IsActive() then
 		Release();
 		return;
@@ -556,8 +710,8 @@ function Evaluate()
 	else
 		SetGate(false);
 		Release();
-		if db.safeSelfCast and IsLivingUnit(unit) then
-			Pause("unit");
+		if SafeCastMode() == "units" and IsLivingUnit(unit) and not IsServiceNPC(unit) then
+			Pause("unit", SafeCall(UnitGUID, unit));
 		end
 		return;
 	end
@@ -600,7 +754,7 @@ poller:SetScript("OnUpdate", function(_, elapsed)
 	sinceCheck = sinceCheck + elapsed;
 	if sinceCheck >= POLL_INTERVAL then
 		sinceCheck = 0;
-		if paused == "unit" and ReadyToResume() then
+		if paused == "unit" and ReadyToResume() and not InteractionWindowOpen() then
 			Resume();
 		end
 		Evaluate();
@@ -625,6 +779,7 @@ local function TryStart()
 	end
 	ready = true;
 	-- a pause left over from the last session (logout while paused)
+	ApplyAutoMode(); -- before Resume, which forgets db.pausedInteract
 	if db.pausedInteract ~= nil and not InCombatLockdown() then
 		Resume();
 	end
@@ -645,7 +800,11 @@ function handlers.VARIABLES_LOADED()
 		ApplyCVars();
 	end
 end
-handlers.PLAYER_ENTERING_WORLD = handlers.VARIABLES_LOADED;
+
+function handlers.PLAYER_ENTERING_WORLD()
+	wipe(interactionTypes); -- a loading screen closes every NPC window
+	handlers.VARIABLES_LOADED();
+end
 
 -- Cvars can't change in combat: close the nameplate just before. Left open, every
 -- lootable corpse would keep a 0% health nameplate until the fight ends; the
@@ -654,7 +813,7 @@ function handlers.PLAYER_REGEN_DISABLED()
 	if ready and IsActive() then
 		SetGate(false);
 		Release();
-		if db.safeSelfCast then
+		if SafeCastMode() ~= "off" then
 			Pause("combat");
 		end
 	end
@@ -684,6 +843,20 @@ function handlers.NAME_PLATE_UNIT_REMOVED(unit)
 	if plate and plate == sparkle.anchor then
 		Release();
 	end
+end
+
+-- Windows opened through the interaction manager (most NPC windows in newer clients)
+function handlers.PLAYER_INTERACTION_MANAGER_FRAME_SHOW(interactionType)
+	interactionTypes[interactionType or "?"] = true;
+end
+
+function handlers.PLAYER_INTERACTION_MANAGER_FRAME_HIDE(interactionType)
+	if interactionType ~= nil and interactionTypes[interactionType] then
+		interactionTypes[interactionType] = nil;
+	else
+		wipe(interactionTypes);
+	end
+	Evaluate();
 end
 
 function handlers.PLAYER_SOFT_INTERACT_CHANGED(oldTarget, newTarget)
@@ -718,6 +891,8 @@ function ns.DebugTarget()
 	end
 	print("|cffffd200Forever Loot Sparkles - Herbs & Ores:|r interaction target");
 	out("ready=", ready, "active=", db and IsActive(), "paused=", paused, "gate=", gateOpen);
+	out("safeCast=", db and SafeCastMode(), "auto=", db and db.safeSelfCastAuto, "backoff=", backoff,
+		"npcWindow=", InteractionWindowOpen(), "service=", IsServiceNPC(SOFT));
 	out("cvars: Interact=", GetCVarValue("SoftTargetInteract"), "IconGameObject=", GetCVarValue("SoftTargetIconGameObject"),
 		"NameplateInteract=", GetCVarValue("SoftTargetNameplateInteract"), "Range=", GetCVarValue("SoftTargetInteractRange"));
 	local unit, plate, unknown = ResolveTarget();
@@ -749,9 +924,22 @@ function ns.SparkleInit(savedVariables)
 			db[key] = value;
 		end
 	end
-	if db.safeSelfCast == nil then
-		db.safeSelfCast = true;
+	-- 2.2.4 and older had a checkbox (safeSelfCast); unticked means "off"
+	if not SAFE_CAST_MODES[db.safeSelfCastMode] then
+		if db.safeSelfCast == false then
+			db.safeSelfCastMode, db.safeSelfCastAuto = "off", false;
+		else
+			db.safeSelfCastAuto = true;
+		end
 	end
+	if db.safeSelfCastAuto == nil then
+		db.safeSelfCastAuto = false;
+	end
+	ApplyAutoMode();
+	if not SAFE_CAST_MODES[db.safeSelfCastMode] then
+		db.safeSelfCastMode = "units";
+	end
+	db.safeSelfCast = db.safeSelfCastMode ~= "off";
 	if db.hidePlate == nil then
 		db.hidePlate = true;
 	end
@@ -767,10 +955,24 @@ function ns.SparkleOptionChanged(value)
 	UpdatePoller();
 end
 
+-- The player picked a mode (dropdown, or the checkbox where there is no dropdown)
 function ns.SafeSelfCastChanged()
-	if not db.safeSelfCast and paused then
+	db.safeSelfCastAuto = false;
+	if not SAFE_CAST_MODES[db.safeSelfCastMode] then
+		db.safeSelfCastMode = "units";
+	end
+	db.safeSelfCast = db.safeSelfCastMode ~= "off";
+	local mode = db.safeSelfCastMode;
+	if paused and (mode == "off" or (mode == "combat" and paused == "unit")) then
 		Resume();
 	end
+	backoff = 0;
+end
+
+ns.SAFE_CAST_MODES = { "off", "combat", "units" };
+ns.InteractionWindowOpen = InteractionWindowOpen; -- also used by IconHider.lua
+function ns.SafeCastMode()
+	return SafeCastMode();
 end
 
 function ns.HidePlateChanged()

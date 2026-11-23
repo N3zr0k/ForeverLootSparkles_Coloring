@@ -15,7 +15,7 @@ Companion addon for **Forever Loot Sparkles** (WoW Forever). The original addon 
 ### Sparkles on herbs, ore, quest objects, corpses and footlockers
 Forever Loot Sparkles 2.0 removed the sparkles on herbs, ore veins, quest objects and corpses with loot. This addon brings them back (taken over from Forever Loot Sparkles 1.3.1) and adds footlockers that rogues can pick open.
 
-- **Safe self-cast** (on): spells cast without a target could land on a player or NPC that soft targeting had picked next to you. Soft targeting is therefore paused in combat and on living units, and switched back on once you have moved a few yards.
+- **Safe self-cast** (three modes): spells cast without a target could land on a player or NPC that soft targeting had picked next to you. *Only in combat* pauses soft targeting during combat; *In combat and on units* also pauses it on players and other living units (not on vendors, auctioneers, bankers and other service NPCs) until you have moved a few yards; *Off* never pauses it. If you had the interact key switched on yourself, *Only in combat* is used until you pick a mode. No game settings are changed while an NPC or auction house window is open.
 - **Hide the nameplate under the sparkle** (on): corpses and objects no longer show an empty nameplate or health bar, only the sparkle.
 - With Forever Loot Sparkles 1.x the addon only colors its sparkles.
 

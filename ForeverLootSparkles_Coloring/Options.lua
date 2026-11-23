@@ -114,6 +114,16 @@ local function SetSwatchKey(swatch, key)
 	swatch.color:SetColorTexture(c[1], c[2], c[3]);
 end
 
+-- Safe self-cast modes, in the order they are offered
+local function SafeCastLabel(mode)
+	return (mode == "off" and L.SAFE_CAST_OFF) or (mode == "combat" and L.SAFE_CAST_COMBAT) or L.SAFE_CAST_UNITS;
+end
+
+local function SetSafeCastMode(mode)
+	ns.db.safeSelfCastMode = mode;
+	ns.SafeSelfCastChanged();
+end
+
 local function CreateSwatch(key, anchor, offsetX, offsetY)
 	local label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight");
 	label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", offsetX, offsetY);
@@ -241,7 +251,35 @@ local function BuildPanel()
 		AddBox(T.quest, T.questTip, Bool("sparkleQuest", Sparkle));
 		AddBox(T.corpse, T.corpseTip, Bool("sparkleCorpseLoot", Sparkle));
 		AddBox(L.footlocker, L.FOOTLOCKER_TOOLTIP .. T.how, Bool("sparkleFootlocker", Sparkle));
-		AddBox(L.SAFE_CAST, L.SAFE_CAST_TOOLTIP, Bool("safeSelfCast", function() ns.SafeSelfCastChanged(); end));
+		-- safe self-cast: a button that steps through the modes
+		local modeButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate");
+		modeButton:SetSize(280, 22);
+		modeButton:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 4, -6);
+		modeButton:SetScript("OnClick", function(self)
+			local modes, current = ns.SAFE_CAST_MODES, ns.SafeCastMode();
+			for index, mode in ipairs(modes) do
+				if mode == current then
+					SetSafeCastMode(modes[index % #modes + 1]);
+					break;
+				end
+			end
+			self.refresh();
+		end);
+		modeButton:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+			GameTooltip:SetText(L.SAFE_CAST, 1, 1, 1);
+			GameTooltip:AddLine(L.SAFE_CAST_TOOLTIP, nil, nil, nil, true);
+			GameTooltip:Show();
+		end);
+		modeButton:SetScript("OnLeave", GameTooltip_Hide);
+		modeButton.refresh = function()
+			modeButton:SetText(L.SAFE_CAST .. ": " .. SafeCastLabel(ns.SafeCastMode()));
+		end;
+		iconBoxes[#iconBoxes + 1] = modeButton;
+		local spacer = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight");
+		spacer:SetPoint("TOPLEFT", modeButton, "BOTTOMLEFT", -4, 0);
+		spacer:SetHeight(1);
+		previous = spacer;
 		AddBox(L.HIDE_PLATE, L.HIDE_PLATE_TOOLTIP, Bool("hidePlate", function() ns.HidePlateChanged(); end));
 	end
 	AddBox(L.ICONS_ALL, L.ICONS_ALL_TOOLTIP,
@@ -466,8 +504,33 @@ local function RegisterInline()
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_QUEST", "sparkleQuest", T.quest, T.questTip, OnSparkleChanged, D.sparkleQuest);
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_CORPSE_LOOT", "sparkleCorpseLoot", T.corpse, T.corpseTip, OnSparkleChanged, D.sparkleCorpseLoot);
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_FOOTLOCKER", "sparkleFootlocker", L.footlocker, L.FOOTLOCKER_TOOLTIP .. T.how, OnSparkleChanged, D.sparkleFootlocker);
-		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_SAFE_CAST", "safeSelfCast", L.SAFE_CAST, L.SAFE_CAST_TOOLTIP,
-			function() ns.SafeSelfCastChanged(); end, true);
+		-- Safe self-cast as a dropdown; a checkbox (on = "units") where the
+		-- client has no dropdown for addon settings
+		local function AddSafeCastDropdown()
+			local create = Settings.CreateDropdown or Settings.CreateDropDown;
+			if not (create and Settings.CreateControlTextContainer and Settings.VarType.String) then
+				return false;
+			end
+			local modeSetting = Settings.RegisterAddOnSetting(category, "FOREVER_LOOT_SPARKLES_COLORING_SAFE_CAST_MODE",
+				"safeSelfCastMode", ns.db, Settings.VarType.String, L.SAFE_CAST, "units");
+			modeSetting:SetValueChangedCallback(function()
+				ns.SafeSelfCastChanged();
+			end);
+			local function GetOptions()
+				local container = Settings.CreateControlTextContainer();
+				for _, mode in ipairs(ns.SAFE_CAST_MODES) do
+					container:Add(mode, SafeCastLabel(mode));
+				end
+				return container:GetData();
+			end
+			create(category, modeSetting, GetOptions, L.SAFE_CAST_TOOLTIP);
+			return true;
+		end
+		local okDropdown, hasDropdown = pcall(AddSafeCastDropdown);
+		if not (okDropdown and hasDropdown) then
+			AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_SAFE_CAST", "safeSelfCast", L.SAFE_CAST, L.SAFE_CAST_TOOLTIP,
+				function(_, value) SetSafeCastMode(value and "units" or "off"); end, true);
+		end
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_HIDE_PLATE", "hidePlate", L.HIDE_PLATE, L.HIDE_PLATE_TOOLTIP,
 			function() ns.HidePlateChanged(); end, true);
 	end
