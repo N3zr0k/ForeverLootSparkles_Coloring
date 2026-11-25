@@ -25,6 +25,7 @@ ns.DEFAULT_COLORS = {
 	quest = { 1.00, 0.88, 0.52 },
 	corpseLoot = { 0.75, 0.50, 1.00 },
 	footlocker = { 1.00, 0.96, 0.41 }, -- rogue class color
+	skinning = { 103 / 255, 75 / 255, 45 / 255 }, -- leather brown #674B2D (Sven's pick; shows via the tint layer)
 };
 
 local db;
@@ -45,6 +46,12 @@ function ns.InitDB()
 		db.enabled = true;
 	end
 	db.colors = db.colors or {};
+	-- earlier default browns (2.3.0 and 2.3.1-2.3.7): move them to the current default
+	local skin = db.colors.skinning;
+	if type(skin) == "table" and ((skin[1] == 0.72 and skin[2] == 0.48 and skin[3] == 0.26)
+		or (skin[1] == 0.95 and skin[2] == 0.70 and skin[3] == 0.42)) then
+		db.colors.skinning = nil;
+	end
 	for key, color in pairs(ns.DEFAULT_COLORS) do
 		local saved = db.colors[key];
 		if type(saved) ~= "table" or type(saved[1]) ~= "number" then

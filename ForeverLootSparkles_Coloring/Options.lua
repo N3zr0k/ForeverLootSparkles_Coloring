@@ -15,11 +15,25 @@ local enableBox;
 local iconBoxes = {};
 local settingsCategory;
 
+-- With "Only your own professions" on, the herb, ore and skinning options of
+-- a character without that profession are greyed out and can't be clicked
+-- (the saved choice is kept)
+local PROFESSION_CATEGORIES = { herb = true, ore = true, skinning = true };
+local function Unavailable(category)
+	return PROFESSION_CATEGORIES[category] == true and ns.CategoryAvailable ~= nil
+		and not ns.CategoryAvailable(category);
+end
+
 local function UpdateSwatches()
 	for swatch in pairs(swatches) do
 		local c = swatch.key and ns.db.colors[swatch.key];
 		if c then
 			swatch.color:SetColorTexture(c[1], c[2], c[3]);
+		end
+		if swatch.label and PROFESSION_CATEGORIES[swatch.key] then
+			local alpha = Unavailable(swatch.key) and 0.4 or 1;
+			swatch:SetAlpha(alpha);
+			swatch.label:SetAlpha(alpha);
 		end
 	end
 	if enableBox then
@@ -134,6 +148,7 @@ local function CreateSwatch(key, anchor, offsetX, offsetY)
 	local swatch = NewSwatch(panel);
 	swatch:SetPoint("LEFT", label, "RIGHT", 10, 0);
 	SetSwatchKey(swatch, key);
+	swatch.label = label;
 	return label;
 end
 
@@ -169,9 +184,57 @@ local function BuildPanel()
 	end);
 	enableBox:SetScript("OnLeave", GameTooltip_Hide);
 
+	-- strength of the colored layer under the glints, right under "Color the sparkles"
+	local swatchTop, swatchX = enableBox, 4;
+	if ns.modern then
+		-- strength of the colored layer under the glints
+		local tintLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight");
+		tintLabel:SetPoint("TOPLEFT", enableBox, "BOTTOMLEFT", 4, -8);
+		local tintSlider = CreateFrame("Slider", nil, panel);
+		tintSlider:SetOrientation("HORIZONTAL");
+		tintSlider:SetSize(220, 16);
+		tintSlider:SetPoint("TOPLEFT", tintLabel, "BOTTOMLEFT", 0, -6);
+		tintSlider:SetMinMaxValues(0, 100);
+		tintSlider:SetValueStep(5);
+		if tintSlider.SetObeyStepOnDrag then
+			tintSlider:SetObeyStepOnDrag(true);
+		end
+		local track = tintSlider:CreateTexture(nil, "BACKGROUND");
+		track:SetPoint("LEFT", 0, 0);
+		track:SetPoint("RIGHT", 0, 0);
+		track:SetHeight(6);
+		track:SetColorTexture(0.3, 0.3, 0.3, 1);
+		tintSlider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal");
+		local function ShowTint(v)
+			tintLabel:SetText(("%s: %d %%"):format(L.TINT, v));
+		end
+		tintSlider:SetScript("OnValueChanged", function(_, v)
+			v = math.floor(v / 5 + 0.5) * 5;
+			ns.db.tintStrength = v;
+			ShowTint(v);
+		end);
+		tintSlider:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+			GameTooltip:SetText(L.TINT, 1, 1, 1);
+			GameTooltip:AddLine(L.TINT_TOOLTIP, nil, nil, nil, true);
+			GameTooltip:Show();
+		end);
+		tintSlider:SetScript("OnLeave", GameTooltip_Hide);
+		tintSlider.refresh = function()
+			local v = type(ns.db.tintStrength) == "number" and ns.db.tintStrength or ns.TINT_DEFAULT;
+			tintSlider:SetValue(v);
+			ShowTint(v);
+		end;
+		iconBoxes[#iconBoxes + 1] = tintSlider;
+		swatchTop, swatchX = tintSlider, 0;
+	end
+
 	-- Rows in the order the user asked for
-	local anchor = CreateSwatch("herb", enableBox, 4, -14);
+	local anchor = CreateSwatch("herb", swatchTop, swatchX, -14);
 	anchor = CreateSwatch("ore", anchor, 0, -16);
+	if ns.modern then
+		anchor = CreateSwatch("skinning", anchor, 0, -16);
+	end
 	anchor = CreateSwatch("quest", anchor, 0, -16);
 	anchor = CreateSwatch("corpseLoot", anchor, 0, -16);
 	if ns.modern then
@@ -221,8 +284,9 @@ local function BuildPanel()
 		end);
 		box:SetScript("OnLeave", GameTooltip_Hide);
 		box.refresh = function()
-			local dim = box.iconKind and ns.db.hideAllIcons;
-			box:SetChecked(dim or get());
+			local dimIcon = box.iconKind and ns.db.hideAllIcons;
+			local dim = dimIcon or (box.profession ~= nil and Unavailable(box.profession));
+			box:SetChecked(dimIcon or get());
 			box:SetAlpha(dim and 0.4 or 1);
 			if dim then
 				box:Disable();
@@ -246,8 +310,13 @@ local function BuildPanel()
 		local function Sparkle(value)
 			ns.SparkleOptionChanged(value);
 		end
-		AddBox(T.herb, T.herbTip, Bool("sparkleHerbs", Sparkle));
-		AddBox(T.ore, T.oreTip, Bool("sparkleOre", Sparkle));
+		AddBox(L.OWN_PROFESSIONS, L.OWN_PROFESSIONS_TOOLTIP, Bool("onlyOwnProfessions", function()
+			ns.ProfessionsChanged();
+			UpdateSwatches();
+		end));
+		AddBox(T.herb, T.herbTip, Bool("sparkleHerbs", Sparkle)).profession = "herb";
+		AddBox(T.ore, T.oreTip, Bool("sparkleOre", Sparkle)).profession = "ore";
+		AddBox(L.skinning, L.SKINNING_TOOLTIP .. T.how, Bool("sparkleSkinning", Sparkle)).profession = "skinning";
 		AddBox(T.quest, T.questTip, Bool("sparkleQuest", Sparkle));
 		AddBox(T.corpse, T.corpseTip, Bool("sparkleCorpseLoot", Sparkle));
 		AddBox(L.footlocker, L.FOOTLOCKER_TOOLTIP .. T.how, Bool("sparkleFootlocker", Sparkle));
@@ -331,6 +400,7 @@ local SWATCH_FOR_VARIABLE = {
 	FOREVER_LOOT_SPARKLES_COLORING_QUEST = "quest",
 	FOREVER_LOOT_SPARKLES_COLORING_CORPSE_LOOT = "corpseLoot",
 	FOREVER_LOOT_SPARKLES_COLORING_FOOTLOCKER = "footlocker",
+	FOREVER_LOOT_SPARKLES_COLORING_SKINNING = "skinning",
 	FOREVER_LOOT_SPARKLES_HERBS = "herb",
 	FOREVER_LOOT_SPARKLES_ORE = "ore",
 	FOREVER_LOOT_SPARKLES_QUEST = "quest",
@@ -474,6 +544,31 @@ local function DimIconRow(frame, elementData)
 	end
 end
 
+-- Same for the herb, ore and skinning rows on Forever Loot Sparkles' page;
+-- their swatches sit on the rows and dim with them
+local PROFESSION_VARIABLES = {
+	FOREVER_LOOT_SPARKLES_COLORING_HERBS = "herb",
+	FOREVER_LOOT_SPARKLES_COLORING_ORE = "ore",
+	FOREVER_LOOT_SPARKLES_COLORING_SKINNING = "skinning",
+};
+local function DimProfessionRow(frame, elementData)
+	local category = PROFESSION_VARIABLES[RowVariable(frame, elementData) or ""];
+	local checkbox = frame.Checkbox or frame.CheckBox;
+	if category and Unavailable(category) then
+		frame.FLSColoringNoSkill = true;
+		frame:SetAlpha(0.4);
+		if checkbox and checkbox.Disable then
+			checkbox:Disable();
+		end
+	elseif frame.FLSColoringNoSkill then
+		frame.FLSColoringNoSkill = nil;
+		frame:SetAlpha(1);
+		if checkbox and checkbox.Enable then
+			checkbox:Enable();
+		end
+	end
+end
+
 local function RegisterInline()
 	local category = ns.FindFLSCategory();
 	if not (category and ns.HookRows and ns.HookRows()
@@ -484,6 +579,7 @@ local function RegisterInline()
 
 	table.insert(ns.rowListeners, DecorateRow);
 	table.insert(ns.rowListeners, DimIconRow);
+	table.insert(ns.rowListeners, DimProfessionRow);
 
 	-- Forever Loot Sparkles 2.x: the sparkles now come from this addon
 	if ns.modern then
@@ -499,8 +595,16 @@ local function RegisterInline()
 			ns.SparkleOptionChanged(value);
 		end
 		local D = ns.SPARKLE_DEFAULTS;
+		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_OWN_PROFESSIONS", "onlyOwnProfessions", L.OWN_PROFESSIONS,
+			L.OWN_PROFESSIONS_TOOLTIP, function()
+				ns.ProfessionsChanged();
+				if ns.RefreshRows then
+					ns.RefreshRows();
+				end
+			end, D.onlyOwnProfessions);
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_HERBS", "sparkleHerbs", T.herb, T.herbTip, OnSparkleChanged, D.sparkleHerbs);
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_ORE", "sparkleOre", T.ore, T.oreTip, OnSparkleChanged, D.sparkleOre);
+		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_SKINNING", "sparkleSkinning", L.skinning, L.SKINNING_TOOLTIP .. T.how, OnSparkleChanged, D.sparkleSkinning);
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_QUEST", "sparkleQuest", T.quest, T.questTip, OnSparkleChanged, D.sparkleQuest);
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_CORPSE_LOOT", "sparkleCorpseLoot", T.corpse, T.corpseTip, OnSparkleChanged, D.sparkleCorpseLoot);
 		AddSparkleBox("FOREVER_LOOT_SPARKLES_COLORING_FOOTLOCKER", "sparkleFootlocker", L.footlocker, L.FOOTLOCKER_TOOLTIP .. T.how, OnSparkleChanged, D.sparkleFootlocker);
@@ -543,6 +647,21 @@ local function RegisterInline()
 		ns.ColorsChanged();
 	end);
 	Settings.CreateCheckbox(category, setting, L.ENABLE_TOOLTIP .. "\n\n" .. L.NOTE);
+	-- Strength of the colored layer under the glints, 0-100 %
+	pcall(function()
+		if not (ns.modern and Settings.CreateSlider and Settings.CreateSliderOptions and Settings.VarType.Number) then
+			return;
+		end
+		local tintSetting = Settings.RegisterAddOnSetting(category, "FOREVER_LOOT_SPARKLES_COLORING_TINT",
+			"tintStrength", ns.db, Settings.VarType.Number, L.TINT, ns.TINT_DEFAULT);
+		local sliderOptions = Settings.CreateSliderOptions(0, 100, 5);
+		if sliderOptions.SetLabelFormatter and MinimalSliderWithSteppersMixin and MinimalSliderWithSteppersMixin.Label then
+			sliderOptions:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, function(value)
+				return ("%d %%"):format(value);
+			end);
+		end
+		Settings.CreateSlider(category, tintSetting, sliderOptions, L.TINT_TOOLTIP);
+	end);
 
 	local reset = CreateSettingsButtonInitializer("", L.RESET, function()
 		ns.ResetColors();
@@ -621,6 +740,24 @@ local function IsFLSModern()
 	-- 1.x fills in its sparkle options when it loads, 2.x deletes them
 	local flsDB = ForeverLootSparklesDB;
 	return not (type(flsDB) == "table" and flsDB.sparkleOre ~= nil);
+end
+
+-- Learning or unlearning a profession updates the greyed out state right away
+local skillWatcher = CreateFrame("Frame");
+skillWatcher:SetScript("OnEvent", function()
+	if not ns.db then
+		return;
+	end
+	UpdateSwatches();
+	if ns.RefreshRows then
+		ns.RefreshRows();
+	end
+	if ns.ProfessionsChanged then
+		ns.ProfessionsChanged();
+	end
+end);
+for _, event in ipairs({ "LEARNED_SPELL_IN_TAB", "SKILL_LINES_CHANGED", "SPELLS_CHANGED" }) do
+	pcall(skillWatcher.RegisterEvent, skillWatcher, event);
 end
 
 local loader = CreateFrame("Frame");

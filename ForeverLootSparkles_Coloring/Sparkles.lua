@@ -33,6 +33,7 @@ local CATEGORY_OPTIONS = {
 	quest = "sparkleQuest",
 	corpseLoot = "sparkleCorpseLoot",
 	footlocker = "sparkleFootlocker",
+	skinning = "sparkleSkinning",
 };
 local DEFAULTS = {
 	sparkleOre = true,
@@ -40,6 +41,8 @@ local DEFAULTS = {
 	sparkleQuest = false,
 	sparkleCorpseLoot = true,
 	sparkleFootlocker = true,
+	sparkleSkinning = true,
+	onlyOwnProfessions = true, -- herbs, ore and skinning only for characters with that profession
 };
 
 -- Footlockers rogues can pick open, by game object ID (from the GUID). The
@@ -58,6 +61,11 @@ local OFFSET_Y = -45;      -- from the nameplate down to the object (pixels)
 local SPREAD = 46;         -- radius the glints appear in (pixels)
 local GLINT_SIZE = 34;
 local GLINT_COUNT = 7;
+-- Each glint is drawn twice: an additive glow, and under it the same shape
+-- blended normally in the category color. On bright ground (snow, sand) the
+-- additive glow alone washes out to white, the tint layer keeps the color.
+local TINT_DEFAULT = 30;   -- percent; db.tintStrength (options slider), 0 = the original glow only
+local TINT_SCALE = 1.15;
 local GOLD, GREY = ns.GOLD, ns.GREY;
 
 local POLL_INTERVAL = 0.12; -- re-check of target and state (seconds)
@@ -409,9 +417,32 @@ end
 
 -- Does the corpse still hold loot this character may take? pcall instead of
 -- SafeCall: both return values are needed.
+-- Corpses just looted: the client still reports loot on them for a moment
+-- after the loot window closes, which made them sparkle once more. Their
+-- GUIDs count as empty while the window is open and for LOOTED_HOLD seconds
+-- after; loot left behind in them sparkles again after that.
+local LOOTED_HOLD = 3;
+local OPEN = math.huge;
+local looted = {}; -- GUID -> time its loot window closed, OPEN while it is open
+
+local function RecentlyLooted(guid)
+	local closedAt = looted[guid];
+	if not closedAt then
+		return false;
+	end
+	if closedAt ~= OPEN and GetTime() - closedAt >= LOOTED_HOLD then
+		looted[guid] = nil;
+		return false;
+	end
+	return true;
+end
+
 local function HasLootLeft(unit)
 	local guid = SafeCall(UnitGUID, unit);
 	if not (guid and CanLootUnit) then
+		return false;
+	end
+	if RecentlyLooted(guid) then
 		return false;
 	end
 	local ok, hasLoot, canLoot = pcall(CanLootUnit, guid);
@@ -424,6 +455,147 @@ end
 -- UnitIsCorpse is false for dead mobs (checked in the client), UnitIsDead isn't
 local function IsCorpseWithLoot(unit)
 	return SafeCall(UnitIsDead, unit) == true and HasLootLeft(unit);
+end
+
+-- Gathering professions by their rank spells, Apprentice to Artisan. With
+-- "Only your own professions" (db.onlyOwnProfessions, on by default) herbs,
+-- ore and skinnable corpses only sparkle for characters who know the
+-- profession; the options of the others are greyed out.
+local PROFESSION_SPELLS = {
+	herb = { 2366, 2368, 3570, 11993 },     -- Herbalism
+	ore = { 2575, 2576, 3564, 10248 },      -- Mining
+	skinning = { 8613, 8617, 8618, 10768 }, -- Skinning
+};
+
+local function KnowsProfession(category)
+	local spells = PROFESSION_SPELLS[category];
+	if not spells then
+		return true;
+	end
+	local known = IsPlayerSpell or IsSpellKnown;
+	if not known then
+		return true; -- can't tell: don't hide anything
+	end
+	for _, spell in ipairs(spells) do
+		if SafeCall(known, spell) == true then
+			return true;
+		end
+	end
+	return false;
+end
+
+-- May this category sparkle for this character?
+local function CategoryAvailable(category)
+	return not (db and db.onlyOwnProfessions) or KnowsProfession(category);
+end
+
+local function KnowsSkinning()
+	return KnowsProfession("skinning");
+end
+
+-- The tooltip of a skinnable corpse has a line "Skinnable" (red when the
+-- skill is too low). Read through C_TooltipInfo where the client has it,
+-- otherwise from a hidden tooltip of our own.
+local SKINNABLE_TEXTS = {};
+for _, key in ipairs({ "UNIT_SKINNABLE_LEATHER", "UNIT_SKINNABLE_HERB", "UNIT_SKINNABLE_ROCK", "UNIT_SKINNABLE_BOLTS" }) do
+	local text = _G[key];
+	if type(text) == "string" and text ~= "" then
+		SKINNABLE_TEXTS[text] = true;
+	end
+end
+if not next(SKINNABLE_TEXTS) then
+	SKINNABLE_TEXTS["Skinnable"] = true;
+end
+
+local function IsRed(r, g, b)
+	return type(r) == "number" and type(g) == "number" and type(b) == "number"
+		and not IsSecret(r) and not IsSecret(g) and not IsSecret(b)
+		and r > 0.9 and g < 0.3 and b < 0.3;
+end
+
+local scanTooltip;
+local SCAN_NAME = "ForeverLootSparklesColoringScanTooltip";
+
+-- true/false (skinnable, skill too low) or nil when no such line is found
+local function SkinnableLine(unit)
+	if C_TooltipInfo and C_TooltipInfo.GetUnit then
+		local data = SafeCall(C_TooltipInfo.GetUnit, unit);
+		if type(data) == "table" and type(data.lines) == "table" then
+			for _, line in ipairs(data.lines) do
+				local text = line.leftText;
+				if type(text) == "string" and not IsSecret(text) and SKINNABLE_TEXTS[text] then
+					local color = line.leftColor;
+					local tooLow = type(color) == "table" and IsRed(color.r, color.g, color.b);
+					return true, tooLow;
+				end
+			end
+			return nil;
+		end
+	end
+	if not scanTooltip then
+		local ok, tooltip = pcall(CreateFrame, "GameTooltip", SCAN_NAME, nil, "GameTooltipTemplate");
+		if not ok or not tooltip then
+			return nil;
+		end
+		scanTooltip = tooltip;
+	end
+	scanTooltip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE");
+	if not pcall(scanTooltip.SetUnit, scanTooltip, unit) then
+		return nil;
+	end
+	local found, tooLow;
+	local ok, count = pcall(scanTooltip.NumLines, scanTooltip);
+	for i = 1, (ok and type(count) == "number" and not IsSecret(count)) and count or 0 do
+		local left = _G[SCAN_NAME .. "TextLeft" .. i];
+		local text = left and SafeCall(left.GetText, left);
+		if type(text) == "string" and SKINNABLE_TEXTS[text] then
+			found, tooLow = true, IsRed(left:GetTextColor());
+			break;
+		end
+	end
+	scanTooltip:Hide();
+	return found, tooLow;
+end
+
+-- The cursor over a corpse: "skin" when it can be skinned, "unable" in the
+-- name when the skill is too low
+local function SkinCursor(unit)
+	local texture, atlas = ns.CursorTexture(unit);
+	for _, name in ipairs({ texture, atlas }) do
+		if type(name) == "string" then
+			local lower = name:lower();
+			if lower:find("skin", 1, true) then
+				return true, lower:find("unable", 1, true) ~= nil;
+			end
+		end
+	end
+	return nil;
+end
+
+-- Answers are kept for a moment per corpse, the tooltip read isn't free
+local SKIN_CACHE_TIME = 1;
+local skinCache = { guid = nil, at = 0, skinnable = false, tooLow = false };
+
+-- Is the dead unit a corpse this character can skin? Second value: the skill
+-- is too low (the sparkle turns grey like a locked object).
+local function SkinnableCorpse(unit)
+	if SafeCall(UnitIsDead, unit) ~= true or SafeCall(UnitIsPlayer, unit) == true then
+		return false, false;
+	end
+	local guid = SafeCall(UnitGUID, unit);
+	local now = GetTime();
+	if guid and guid == skinCache.guid and now - skinCache.at < SKIN_CACHE_TIME then
+		return skinCache.skinnable, skinCache.tooLow;
+	end
+	local skinnable, tooLow = false, false;
+	if CategoryAvailable("skinning") then
+		local cursor, cursorLow = SkinCursor(unit);
+		local line, lineLow = SkinnableLine(unit);
+		skinnable = cursor == true or line == true;
+		tooLow = (cursorLow or lineLow) == true;
+	end
+	skinCache.guid, skinCache.at, skinCache.skinnable, skinCache.tooLow = guid, now, skinnable, tooLow;
+	return skinnable, tooLow;
 end
 
 -- "ready": can interact; "far": too far; "locked": in range but the game
@@ -496,13 +668,14 @@ local function ResolveTarget()
 		end
 		return SOFT, plate;
 	end
-	if not directWorks then
-		for unit in pairs(activeUnits) do
-			if SafeCall(UnitIsGameObject, unit) == true or SafeCall(UnitIsUnit, unit, SOFT) == true then
-				plate = GetNamePlate(unit);
-				if plate then
-					return unit, plate;
-				end
+	-- Units (corpses) keep their own nameplate token: the game's small plate
+	-- on a corpse may not answer to "softinteract", even once objects do
+	for unit in pairs(activeUnits) do
+		if SafeCall(UnitIsUnit, unit, SOFT) == true
+			or (not directWorks and SafeCall(UnitIsGameObject, unit) == true) then
+			plate = GetNamePlate(unit);
+			if plate then
+				return unit, plate;
 			end
 		end
 	end
@@ -539,9 +712,16 @@ local function Animate(self, elapsed)
 	-- dimmer and calmer out of range, grey and slow on a locked object
 	local alpha = sparkle.appear * Lerp(0.55, 1, ready) * (1 - 0.55 * locked);
 	local speed = Lerp(0.8, 1.2, ready) * (1 - 0.5 * locked);
+	local strength = db.tintStrength;
+	if type(strength) ~= "number" then
+		strength = TINT_DEFAULT;
+	end
+	local tintAlpha = max(min(strength, 100), 0) / 100;
 	local base = GOLD;
+	local tinted = false; -- without coloring the sparkle keeps its original golden glow only
 	if db.enabled and sparkle.category and db.colors and db.colors[sparkle.category] then
 		base = db.colors[sparkle.category];
+		tinted = true;
 	end
 	local r = Lerp(base[1], GREY[1], locked);
 	local g = Lerp(base[2], GREY[2], locked);
@@ -559,8 +739,21 @@ local function Animate(self, elapsed)
 		texture:SetSize(size, size);
 		texture:SetRotation(glint.angle + glint.turn * max(glint.age, 0));
 		texture:SetVertexColor(r, g, b, min(alpha * shine, 1));
+		local tint = glint.tint;
+		if tint then
+			if tinted then
+				tint:SetPoint("CENTER", texture, "CENTER", 0, 0);
+				tint:SetSize(size * TINT_SCALE, size * TINT_SCALE);
+				tint:SetRotation(glint.angle + glint.turn * max(glint.age, 0));
+				tint:SetVertexColor(r, g, b, min(alpha * shine * tintAlpha, 1));
+			else
+				tint:SetVertexColor(r, g, b, 0);
+			end
+		end
 	end
 end
+
+local CORPSE_NAME_COLOR = { 0.62, 0.62, 0.62 }; -- grey corpse name, see UpdateCorpseName
 
 local function CreateSparkle()
 	local frame = CreateFrame("Frame");
@@ -578,46 +771,151 @@ local function CreateSparkle()
 			texture:SetSnapToPixelGrid(false);
 			texture:SetTexelSnappingBias(0);
 		end
-		sparkle.glints[i] = { texture = texture };
+		local tint = frame:CreateTexture(nil, "ARTWORK");
+		if tint:SetTexture(TEXTURE) == false then
+			tint:SetTexture(FALLBACK_TEXTURE);
+		end
+		tint:SetBlendMode("BLEND");
+		tint:SetVertexColor(1, 1, 1, 0);
+		if tint.SetSnapToPixelGrid then
+			tint:SetSnapToPixelGrid(false);
+			tint:SetTexelSnappingBias(0);
+		end
+		sparkle.glints[i] = { texture = texture, tint = tint };
 	end
+	-- the corpse name the game shows without this addon (see UpdateCorpseName)
+	local label = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall");
+	label:SetTextColor(CORPSE_NAME_COLOR[1], CORPSE_NAME_COLOR[2], CORPSE_NAME_COLOR[3]);
+	label:SetShadowOffset(1, -1);
+	label:SetShadowColor(0, 0, 0, 1);
+	label:Hide();
+	sparkle.name = label;
 	frame:SetScript("OnUpdate", Animate);
 	sparkle.frame = frame;
 	return frame;
 end
 
--- The nameplate's own content (health bar, name, icon) under the sparkle.
--- The sparkle frame ignores its parent's alpha, so it stays visible.
-local veiled;          -- the UnitFrame made invisible, if any
+-- The nameplate's own content (health bar, name, icon) under the sparkle,
+-- and whatever other addons hang on that nameplate (Questie's quest loot
+-- bag, threat or class icons ...). The sparkle frame ignores its parent's
+-- alpha, so it stays visible. Each hidden frame keeps the alpha it had, or
+-- the one its owner set since, and gets it back when the sparkle moves on.
+local veiled = {};     -- frame -> alpha to restore
+local veiledPlate;     -- the nameplate the veiled frames belong to
 local reveiling = false;
 local veilHooked = {};
 local function KeepVeiled(frame, alpha)
-	if frame == veiled and alpha ~= 0 and not reveiling then
+	if reveiling or veiled[frame] == nil then
+		return;
+	end
+	if type(alpha) == "number" and not IsSecret(alpha) then
+		veiled[frame] = alpha;
+	end
+	if alpha ~= 0 then
 		reveiling = true;
 		pcall(frame.SetAlpha, frame, 0);
 		reveiling = false;
 	end
 end
 
-local function Unveil()
-	if veiled then
-		local frame = veiled;
-		veiled = nil;
-		pcall(frame.SetAlpha, frame, 1);
-	end
-end
-
-local function Veil(plate)
-	Unveil();
-	local frame = db.hidePlate and plate and plate.UnitFrame;
-	if type(frame) ~= "table" or not frame.SetAlpha then
+local function VeilFrame(frame)
+	if type(frame) ~= "table" or veiled[frame] ~= nil or frame == sparkle.frame or not frame.SetAlpha then
 		return;
 	end
+	if frame.IsForbidden and frame:IsForbidden() then
+		return;
+	end
+	local ok, alpha = pcall(frame.GetAlpha, frame);
+	veiled[frame] = (ok and type(alpha) == "number" and not IsSecret(alpha)) and alpha or 1;
 	if not veilHooked[frame] and hooksecurefunc then
 		veilHooked[frame] = true;
 		pcall(hooksecurefunc, frame, "SetAlpha", KeepVeiled);
 	end
-	veiled = frame;
+	reveiling = true;
 	pcall(frame.SetAlpha, frame, 0);
+	reveiling = false;
+end
+
+local function Children(frame)
+	local ok, children = pcall(function() return { frame:GetChildren() }; end);
+	return ok and children or {};
+end
+
+-- The UnitFrame and every other frame on the nameplate; inside the UnitFrame
+-- only frames that ignore its alpha (they would stay visible otherwise).
+-- Called again while the sparkle stays, for frames added later.
+--
+-- The game's interaction icon (SoftTargetFrame) is left out: it
+-- shows through the hidden nameplate, and whether it is visible is up to the
+-- "Hide interaction icons" options (IconHider.lua), as without the sparkle.
+local shownIcon; -- { frame = SoftTargetFrame, ignored = its earlier IgnoreParentAlpha }
+
+local function IconHolder(plate)
+	local unitFrame = plate.UnitFrame;
+	local holder = (type(unitFrame) == "table" and unitFrame.SoftTargetFrame) or plate.SoftTargetFrame;
+	return type(holder) == "table" and holder or nil;
+end
+
+local function ShowIconThrough(holder)
+	if shownIcon or not holder.SetIgnoreParentAlpha then
+		return;
+	end
+	local ok, ignores = pcall(holder.IsIgnoringParentAlpha, holder);
+	shownIcon = { frame = holder, ignored = ok and ignores == true };
+	pcall(holder.SetIgnoreParentAlpha, holder, true);
+end
+
+local function VeilContent(plate)
+	local unitFrame = plate.UnitFrame;
+	local holder = IconHolder(plate);
+	VeilFrame(unitFrame);
+	for _, child in ipairs(Children(plate)) do
+		if child ~= holder then
+			VeilFrame(child);
+		end
+	end
+	if type(unitFrame) == "table" and unitFrame.GetChildren then
+		for _, child in ipairs(Children(unitFrame)) do
+			local ok, ignores = pcall(function() return child:IsIgnoringParentAlpha(); end);
+			if ok and ignores == true and child ~= holder then
+				VeilFrame(child);
+			end
+		end
+	end
+	if holder then
+		ShowIconThrough(holder);
+	end
+end
+
+local function Unveil()
+	veiledPlate = nil;
+	if sparkle.name then
+		sparkle.name:Hide();
+	end
+	reveiling = true;
+	for frame, alpha in pairs(veiled) do
+		pcall(frame.SetAlpha, frame, alpha);
+	end
+	reveiling = false;
+	wipe(veiled);
+	if shownIcon then
+		pcall(shownIcon.frame.SetIgnoreParentAlpha, shownIcon.frame, shownIcon.ignored);
+		shownIcon = nil;
+	end
+end
+
+-- Objects look as in the game without this addon, apart from the sparkle: the
+-- nameplate the addon switched on for them is hidden, name included; the
+-- interaction icon follows the "Hide interaction icons" options (see
+-- VeilContent). On corpses the sparkle draws the grey name the game shows
+-- without this addon (see UpdateCorpseName).
+local function Veil(plate)
+	Unveil();
+	if not (db.hidePlate and type(plate) == "table") then
+		return;
+	end
+	veiledPlate = plate;
+	VeilContent(plate);
 end
 
 local function Release()
@@ -631,10 +929,12 @@ local function Release()
 	sparkle.anchor, sparkle.retarget = nil, nil;
 end
 
-local function Attach(plate, state, category)
+local function Attach(plate, state, category, veil)
 	local frame = sparkle.frame or CreateSparkle();
 	sparkle.category = category;
-	Veil(plate);
+	if veil then
+		Veil(plate);
+	end
 	frame:SetParent(plate);
 	-- below the nameplate content, so its text stays readable
 	local ok, level = pcall(plate.GetFrameLevel, plate);
@@ -677,6 +977,36 @@ local function ProposeState(state)
 	end
 end
 
+-- Corpses: without this addon the game shows a small grey name and the
+-- interaction icon over them, on a plate addons can't reach (not even with
+-- "includeForbidden"). The sparkle needs our nameplate, which replaces it, so
+-- that plate is veiled like an object's and the grey name is drawn by the
+-- sparkle frame instead, under the icon.
+local function IsCorpseCategory(category)
+	return category == "corpseLoot" or category == "skinning";
+end
+
+local function UpdateCorpseName(plate, unit, category)
+	local label = sparkle.name;
+	if not label then
+		return;
+	end
+	local name = IsCorpseCategory(category) and veiledPlate == plate and SafeCall(UnitName, unit);
+	if type(name) ~= "string" or IsSecret(name) or name == "" then
+		label:Hide();
+		return;
+	end
+	label:SetText(name);
+	label:ClearAllPoints();
+	local holder = IconHolder(plate);
+	if holder then
+		label:SetPoint("TOP", holder, "BOTTOM", 0, -2);
+	else
+		label:SetPoint("CENTER", plate, "CENTER", 0, 0);
+	end
+	label:Show();
+end
+
 -- Finds the current interaction target, then brings the game's nameplate (on
 -- only for objects that get a sparkle) and the sparkle itself in line with it
 function Evaluate()
@@ -697,8 +1027,14 @@ function Evaluate()
 		return;
 	end
 
-	-- world objects sparkle, and of the units only corpses with loot left
+	-- world objects sparkle, and of the units only corpses with loot left or,
+	-- for skinners, corpses that can be skinned
 	local category, blocked;
+	local skinnable, skinTooLow = false, false;
+	if db.sparkleSkinning and SafeCall(UnitIsGameObject, unit) ~= true
+		and not (db.sparkleCorpseLoot and IsCorpseWithLoot(unit)) then
+		skinnable, skinTooLow = SkinnableCorpse(unit);
+	end
 	if SafeCall(UnitIsGameObject, unit) == true then
 		local name = SafeCall(UnitName, unit);
 		category, blocked = Classify(unit, name);
@@ -707,6 +1043,8 @@ function Evaluate()
 		end
 	elseif db.sparkleCorpseLoot and IsCorpseWithLoot(unit) then
 		category, blocked = "corpseLoot", false;
+	elseif skinnable then
+		category, blocked = "skinning", skinTooLow; -- grey when the skill is too low
 	else
 		SetGate(false);
 		Release();
@@ -716,7 +1054,8 @@ function Evaluate()
 		return;
 	end
 	local option = CATEGORY_OPTIONS[category];
-	local wanted = option ~= nil and db[option] == true;
+	local wanted = option ~= nil and db[option] == true and CategoryAvailable(category);
+	local veil = db.hidePlate;
 	SetGate(wanted);
 	if not wanted or not plate then
 		-- without a plate it has just been asked for; the sparkle follows when it arrives
@@ -725,12 +1064,17 @@ function Evaluate()
 	end
 
 	local state = ReadState(unit, blocked);
-	if sparkle.anchor ~= plate or sparkle.retarget then
+	if sparkle.anchor ~= plate or sparkle.retarget or sparkle.category ~= category then
 		Release();
-		Attach(plate, state, category);
+		Attach(plate, state, category, veil);
+		UpdateCorpseName(plate, unit, category);
 	else
 		sparkle.category = category;
 		ProposeState(state);
+		if veiledPlate == plate and veil then
+			VeilContent(plate); -- frames other addons added since
+		end
+		UpdateCorpseName(plate, unit, category);
 	end
 end
 
@@ -832,6 +1176,39 @@ function handlers.PLAYER_REGEN_ENABLED()
 	Evaluate();
 end
 
+-- The corpses a loot window shows: each slot's source, and the interaction
+-- target and target as a fallback for clients without GetLootSourceInfo
+function handlers.LOOT_OPENED()
+	local function Mark(guid)
+		if type(guid) == "string" and not IsSecret(guid) then
+			looted[guid] = OPEN;
+		end
+	end
+	local count = SafeCall(GetNumLootItems) or 0;
+	if GetLootSourceInfo and type(count) == "number" then
+		for slot = 1, count do
+			Mark(SafeCall(GetLootSourceInfo, slot));
+		end
+	end
+	Mark(SafeCall(UnitGUID, SOFT));
+	Mark(SafeCall(UnitGUID, "target"));
+	if sparkle.category == "corpseLoot" then
+		Release();
+	end
+end
+
+function handlers.LOOT_CLOSED()
+	local now = GetTime();
+	for guid, closedAt in pairs(looted) do
+		if closedAt == OPEN then
+			looted[guid] = now;
+		elseif now - closedAt >= LOOTED_HOLD then
+			looted[guid] = nil;
+		end
+	end
+	Evaluate();
+end
+
 function handlers.NAME_PLATE_UNIT_ADDED(unit)
 	activeUnits[unit] = true;
 	Evaluate();
@@ -907,7 +1284,9 @@ function ns.DebugTarget()
 	local category, blocked = Classify(u, name);
 	out("classified=", category, "blocked=", blocked, "footlocker=", IsFootlocker(u, name),
 		"option=", db and db.sparkleFootlocker);
+	out("skinnable=", SkinnableCorpse(u), "knowsSkinning=", KnowsSkinning());
 	out("sparkle shown=", sparkle.frame and sparkle.frame:IsShown(), "category=", sparkle.category);
+	out("corpse name=", sparkle.name and sparkle.name:IsShown() and sparkle.name:GetText(), "veiled=", veiledPlate ~= nil);
 end
 
 ---------------------------------------------------------------------------
@@ -915,6 +1294,7 @@ end
 ---------------------------------------------------------------------------
 
 ns.SPARKLE_DEFAULTS = DEFAULTS;
+ns.TINT_DEFAULT = TINT_DEFAULT;
 
 -- Called at ADDON_LOADED with this addon's saved variables
 function ns.SparkleInit(savedVariables)
@@ -942,6 +1322,13 @@ function ns.SparkleInit(savedVariables)
 	db.safeSelfCast = db.safeSelfCastMode ~= "off";
 	if db.hidePlate == nil then
 		db.hidePlate = true;
+	end
+	-- test builds of 2.3.3/2.3.4 saved 75 % as the default; the default is 30 %
+	if not db.tintDefault30 then
+		if db.tintStrength == 75 then
+			db.tintStrength = nil;
+		end
+		db.tintDefault30 = true;
 	end
 	UpdatePoller();
 end
@@ -971,6 +1358,16 @@ end
 
 ns.SAFE_CAST_MODES = { "off", "combat", "units" };
 ns.InteractionWindowOpen = InteractionWindowOpen; -- also used by IconHider.lua
+ns.KnowsSkinning = KnowsSkinning;
+ns.CategoryAvailable = CategoryAvailable;          -- Options.lua greys out herbs, ore and skinning
+
+-- "Only your own professions" was switched, or a profession learned/unlearned
+function ns.ProfessionsChanged()
+	skinCache.guid = nil;
+	if ready then
+		Evaluate();
+	end
+end
 function ns.SafeCastMode()
 	return SafeCastMode();
 end

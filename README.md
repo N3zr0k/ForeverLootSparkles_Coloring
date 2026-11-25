@@ -12,15 +12,16 @@ Companion addon for **Forever Loot Sparkles** (WoW Forever). The original addon 
 
 ## What it does
 
-### Sparkles on herbs, ore, quest objects, corpses and footlockers
-Forever Loot Sparkles 2.0 removed the sparkles on herbs, ore veins, quest objects and corpses with loot. This addon brings them back (taken over from Forever Loot Sparkles 1.3.1) and adds footlockers that rogues can pick open.
+### Sparkles on herbs, ore, quest objects, corpses, footlockers and corpses to skin
+Forever Loot Sparkles 2.0 removed the sparkles on herbs, ore veins, quest objects and corpses with loot. This addon brings them back (taken over from Forever Loot Sparkles 1.3.1) and adds footlockers that rogues can pick open and, for skinners, corpses that can be skinned once their loot is gone.
 
+- **Only your own professions** (on): herbs, ore veins and corpses to skin only sparkle if your character knows Herbalism, Mining or Skinning; the options of professions you don't have are greyed out.
 - **Safe self-cast** (three modes): spells cast without a target could land on a player or NPC that soft targeting had picked next to you. *Only in combat* pauses soft targeting during combat; *In combat and on units* also pauses it on players and other living units (not on vendors, auctioneers, bankers and other service NPCs) until you have moved a few yards; *Off* never pauses it. If you had the interact key switched on yourself, *Only in combat* is used until you pick a mode. No game settings are changed while an NPC or auction house window is open.
-- **Hide the nameplate under the sparkle** (on): corpses and objects no longer show an empty nameplate or health bar, only the sparkle.
+- **Hide the nameplate under the sparkle** (on): the nameplate the sparkle hangs on (and icons other addons put there) is hidden, so objects look as in the game without this addon, plus the sparkle. On corpses the addon draws the small grey name the game shows without it, under the interaction icon. The game's interaction icon follows the "Hide interaction icons" options.
 - With Forever Loot Sparkles 1.x the addon only colors its sparkles.
 
 ### A color per category
-Herbs, ore veins, quest objects, corpses with loot and footlockers each get their own color. The color swatches sit right next to the checkboxes on the Forever Loot Sparkles options page, with an on/off switch and a reset button below them. Out of reach the sparkle dims, on locked objects it turns grey.
+Herbs, ore veins, quest objects, corpses with loot, footlockers and corpses to skin (leather brown) each get their own color. The color swatches sit right next to the checkboxes on the Forever Loot Sparkles options page, with an on/off switch, the **Sparkle color strength** slider (30 %; how strongly the sparkle shows its color, a colored layer under the glow keeps it visible on snow and sand, 0 % is the plain glow) and a reset button below them. Out of reach the sparkle dims, on locked objects it turns grey.
 
 ### Hide interaction icons
 Optionally hides the game's interaction icon (gear, pickaxe, leaf, hand ...) over objects: all at once, or separately for herbs, ore, quest objects, corpses with loot, other objects and NPCs. The sparkles stay visible.

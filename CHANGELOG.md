@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.3.8
+
+- New sparkle category **Skinning**: if your character knows Skinning, corpses you can skin sparkle once their loot is gone, in leather brown by default, grey when your skill is too low.
+- New option **Only your own professions** (on): herbs, ore and Skinning only sparkle if your character knows the profession; the options of the others are greyed out.
+- New option **Sparkle color strength** (default 30 %) under "Color the sparkles": the colors now also stay visible on bright ground such as snow.
+- Fixed: sparkling corpses now look as without this addon (grey name, interaction icon), plus the sparkle.
+
 ## 2.2.5
 
 - Fixed: with the interact key on, safe self-cast kept switching the interact key off at the auction house and other NPCs, so the interact icon flickered and addons like Auctionator ran into errors (see BUGFIX.md).

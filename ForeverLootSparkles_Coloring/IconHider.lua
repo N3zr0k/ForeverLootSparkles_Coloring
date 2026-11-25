@@ -153,7 +153,9 @@ local function SetIconVisible(icon, visible)
 			hidden[icon] = nil;
 			local alpha = wanted[icon];
 			wanted[icon] = nil;
-			WriteAlpha(icon, alpha or 1);
+			-- the alpha the game last asked for, unless that was 0 (a fade):
+			-- the game shows the icon again with Show(), not SetAlpha
+			WriteAlpha(icon, (alpha and alpha > 0) and alpha or 1);
 		end
 		return;
 	end
